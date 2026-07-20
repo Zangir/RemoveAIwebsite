@@ -172,3 +172,15 @@ test('ChatGPT UI artifacts', () => {
   const r = scanText('Method overview.\nCopy code\ndef f(x): return x');
   assert.ok(ids(r).includes('chatgpt-ui'));
 });
+
+test('phrases match across hard-wrapped lines (LaTeX 76-col wrapping)', () => {
+  const r = scanText('Thank you for\npointing that out! Also, let me know if\nyou need further changes.');
+  const got = r.findings.map((f) => f.ruleId);
+  assert.ok(got.includes('thanks-pointing'));
+  assert.ok(got.includes('let-me-know'));
+});
+
+test('"right-censored" and "right-handed" never trigger youre-right', () => {
+  const r = scanText('Survival models handle you are right-censored data. Most subjects you are right-handed.');
+  assert.ok(!r.findings.some((f) => f.ruleId === 'youre-right'));
+});

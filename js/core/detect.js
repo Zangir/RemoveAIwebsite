@@ -24,8 +24,23 @@ export const FIX = {
   FLAG: 'flag',
 };
 
+// LaTeX sources are hard-wrapped, so a phrase like "thank you for pointing
+// that out" is routinely split across lines. Compile every literal space in a
+// rule (outside character classes) to \s+ so rules match across line breaks.
+function flexWhitespace(source) {
+  let out = '', inClass = false;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (c === '\\') { out += c + (source[++i] ?? ''); continue; }
+    if (c === '[') inClass = true;
+    else if (c === ']') inClass = false;
+    out += c === ' ' && !inClass ? '\\s+' : c;
+  }
+  return out;
+}
+
 const R = (id, category, severity, pattern, fix, description, opts = {}) =>
-  ({ id, category, severity, pattern, fix, description, ...opts });
+  ({ id, category, severity, pattern: new RegExp(flexWhitespace(pattern.source), pattern.flags), fix, description, ...opts });
 
 export const RULES = [
   // ---- HIGH: assistant self-reference ----
@@ -57,7 +72,8 @@ export const RULES = [
     FIX.REMOVE_SENTENCE, 'Assistant follow-up offer'),
   R('anything-else', 'chat-artifact', 'high', /\bis there anything else (?:i can|you(?:'d| would) like)\b/gi,
     FIX.REMOVE_SENTENCE, 'Assistant follow-up offer'),
-  R('youre-right', 'chat-artifact', 'high', /\byou(?:'re| are) (?:absolutely |completely |totally |quite )?right\b/gi,
+  // (?!-) guards statistical/technical compounds: right-censored, right-handed, right-invariant
+  R('youre-right', 'chat-artifact', 'high', /\byou(?:'re| are) (?:absolutely |completely |totally |quite )?right\b(?!-)/gi,
     FIX.REMOVE_SENTENCE, 'Chat reply artifact ("You\'re right")'),
   R('thanks-pointing', 'chat-artifact', 'high',
     /\bthank you for (?:pointing (?:that|this) out|your patience|the clarification|clarifying|catching that)\b/gi,

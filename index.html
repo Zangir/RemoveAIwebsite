@@ -3,8 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RemoveAI — arXiv AI-text &amp; citation checker</title>
-<meta name="description" content="Check LaTeX/BibTeX/PDF papers for AI-generated text artifacts and fabricated citations. Runs entirely in your browser — no GenAI, no uploads.">
+<title>RemoveAI — catch AI-generated text &amp; fake citations before arXiv does</title>
+<meta name="description" content="Free checker for arXiv submissions: finds ChatGPT artifacts ('As an AI language model…', 'I hope this helps!') and hallucinated references in .tex/.bib/.pdf, then fixes them. 100% client-side, no GenAI, files never leave your browser.">
+<meta name="keywords" content="arXiv, AI-generated text detector, fake citations, hallucinated references, ChatGPT artifacts, LaTeX checker, BibTeX validator, paper checker">
+<link rel="canonical" href="https://zangir.github.io/RemoveAIwebsite/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="RemoveAI — catch AI-generated text & fake citations before arXiv does">
+<meta property="og:description" content="Drop in your .tex/.bib/.pdf → get a problem report and fixed files. Verifies every citation against Semantic Scholar, CrossRef & OpenAlex. No GenAI, no uploads — runs in your browser.">
+<meta property="og:url" content="https://zangir.github.io/RemoveAIwebsite/">
+<meta property="og:image" content="https://zangir.github.io/RemoveAIwebsite/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="RemoveAI — catch AI-generated text & fake citations before arXiv does">
+<meta name="twitter:description" content="arXiv now rejects papers with chat artifacts and hallucinated references. Check yours first — free, client-side, no GenAI.">
+<meta name="twitter:image" content="https://zangir.github.io/RemoveAIwebsite/assets/og.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebApplication","name":"RemoveAI",
+"url":"https://zangir.github.io/RemoveAIwebsite/",
+"description":"Checker for arXiv submissions: detects AI-generated text artifacts and verifies citations against Semantic Scholar, CrossRef and OpenAlex, then produces fixed files.",
+"applicationCategory":"Utilities","operatingSystem":"Any (browser)","offers":{"@type":"Offer","price":"0"}}
+</script>
 <link rel="stylesheet" href="css/style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🧹</text></svg>">
 </head>
@@ -28,6 +45,7 @@
       <p class="dz-small">.tex &nbsp; .bib &nbsp; .bbl &nbsp; .pdf &nbsp; .txt — multiple files welcome (e.g. main.tex + refs.bib)</p>
       <input type="file" id="file-input" multiple accept=".tex,.bib,.bbl,.pdf,.txt,.latex" hidden>
     </div>
+    <p class="demo-row">No files handy? <button id="demo-btn" class="linklike" type="button">▶ Try the demo</button> — loads a sample paper with 4 chat artifacts and a fabricated citation planted in it.</p>
     <ul id="file-list" class="file-list"></ul>
     <div class="controls">
       <label class="mailto-label" title="CrossRef & OpenAlex give faster, more reliable service to requests that identify themselves ('polite pool'). Optional; sent only to those APIs.">

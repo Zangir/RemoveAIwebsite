@@ -35,6 +35,26 @@ dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') 
 dz.addEventListener('drop', (e) => addFiles([...(e.dataTransfer?.files || [])]));
 fi.addEventListener('change', () => { addFiles([...fi.files]); fi.value = ''; });
 $('reset-btn').addEventListener('click', () => location.reload());
+$('demo-btn').addEventListener('click', loadDemo);
+
+async function loadDemo() {
+  const msg = $('upload-msg');
+  msg.classList.remove('error');
+  msg.textContent = 'Loading sample files…';
+  try {
+    const files = await Promise.all(['samples/main.tex', 'samples/refs.bib'].map(async (p) => {
+      const res = await fetch(p);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      return new File([blob], p.split('/').pop(), { type: 'text/plain' });
+    }));
+    await addFiles(files);
+    msg.textContent = 'Sample paper loaded — press “Scan files”. It contains 4 planted chat artifacts, a fabricated citation with a dead DOI, and a wrong publication year.';
+  } catch (e) {
+    msg.textContent = `Could not load samples: ${e.message}`;
+    msg.classList.add('error');
+  }
+}
 $('scan-btn').addEventListener('click', runScan);
 $('cancel-btn').addEventListener('click', () => { state.cancelled = true; });
 $('apply-btn').addEventListener('click', applyFixes);

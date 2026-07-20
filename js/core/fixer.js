@@ -14,7 +14,17 @@ export function fixText(text, findings) {
   for (const f of findings) {
     if (!f.selected) continue;
     if (f.fix === FIX.REMOVE_SENTENCE) {
-      const [s, e] = f.sentenceStart !== f.sentenceEnd ? [f.sentenceStart, f.sentenceEnd] : sentenceSpan(text, f.start, f.end);
+      let [s, e] = f.sentenceStart !== f.sentenceEnd ? [f.sentenceStart, f.sentenceEnd] : sentenceSpan(text, f.start, f.end);
+      // A match inside a % comment is line-scoped: remove only the comment,
+      // never let a period-less comment's "sentence" swallow the next line.
+      if (f.inComment) {
+        const ls = text.lastIndexOf('\n', f.start - 1) + 1;
+        let cs = ls;
+        for (let i = ls; i < f.start; i++) if (text[i] === '%' && text[i - 1] !== '\\') { cs = i; break; }
+        let le = text.indexOf('\n', f.start);
+        if (le === -1) le = text.length;
+        [s, e] = cs === ls ? [ls, Math.min(le + 1, text.length)] : [cs, le];
+      }
       edits.push({ start: s, end: e, replacement: '' });
       changes.push({ line: f.line, action: 'removed sentence', detail: `${f.description}: “${truncate(text.slice(s, e))}”` });
     } else if (f.fix === FIX.REMOVE_MATCH) {

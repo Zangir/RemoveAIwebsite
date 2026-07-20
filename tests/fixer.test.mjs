@@ -144,3 +144,21 @@ We evaluate on GLUE.`;
   assert.ok(out.includes('We evaluate on GLUE.'));
   assert.ok(out.includes('\\section{Introduction}'));
 });
+
+test('in-comment artifact removal is line-scoped, never eats the next line', () => {
+  const tex = 'Good text before.\n% leftover: I hope this helps with the rebuttal\nSurvival analysis handles censored data.\n';
+  const { findings } = scanText(tex, { filetype: 'tex' });
+  const r = fixText(tex, findings);
+  assert.ok(r.text.includes('Good text before.'));
+  assert.ok(r.text.includes('Survival analysis handles censored data.'));
+  assert.ok(!r.text.includes('rebuttal'));
+});
+
+test('trailing comment removal keeps the code part of the line', () => {
+  const tex = 'x = 1 % I hope this helps\ny = 2\n';
+  const { findings } = scanText(tex, { filetype: 'tex' });
+  const r = fixText(tex, findings);
+  assert.ok(r.text.includes('x = 1'));
+  assert.ok(r.text.includes('y = 2'));
+  assert.ok(!r.text.includes('hope'));
+});

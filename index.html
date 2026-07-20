@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RemoveAI — arXiv AI-text &amp; citation checker</title>
+<meta name="description" content="Check LaTeX/BibTeX/PDF papers for AI-generated text artifacts and fabricated citations. Runs entirely in your browser — no GenAI, no uploads.">
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🧹</text></svg>">
+</head>
+<body>
+<header>
+  <h1>🧹 RemoveAI</h1>
+  <p class="tagline">AI-text &amp; citation checker for arXiv submissions</p>
+  <p class="sub">
+    Finds chat-assistant artifacts and hallucinated references in <b>.tex / .bib / .bbl / .pdf / .txt</b> files
+    using key phrases, regular expressions and cross-checks against
+    <b>Semantic Scholar, CrossRef and OpenAlex</b> (which also index arXiv).
+    No generative AI is used anywhere. Your files never leave the browser —
+    only citation titles/DOIs are sent to the public APIs for verification.
+  </p>
+</header>
+
+<main>
+  <section id="upload-section" class="card">
+    <div id="dropzone" tabindex="0" role="button" aria-label="Upload files">
+      <p class="dz-big">Drop files here or click to choose</p>
+      <p class="dz-small">.tex &nbsp; .bib &nbsp; .bbl &nbsp; .pdf &nbsp; .txt — multiple files welcome (e.g. main.tex + refs.bib)</p>
+      <input type="file" id="file-input" multiple accept=".tex,.bib,.bbl,.pdf,.txt,.latex" hidden>
+    </div>
+    <ul id="file-list" class="file-list"></ul>
+    <div class="controls">
+      <label class="mailto-label" title="CrossRef & OpenAlex give faster, more reliable service to requests that identify themselves ('polite pool'). Optional; sent only to those APIs.">
+        Contact e-mail for API polite pool (optional):
+        <input type="email" id="mailto" placeholder="you@university.edu" autocomplete="email">
+      </label>
+      <button id="scan-btn" class="primary" disabled>Scan files</button>
+      <button id="reset-btn" class="ghost" hidden>Start over</button>
+    </div>
+    <p id="upload-msg" class="msg" role="status"></p>
+  </section>
+
+  <section id="progress-section" class="card" hidden>
+    <h2>Checking…</h2>
+    <div class="progressbar"><div id="progress-fill"></div></div>
+    <p id="progress-label" role="status"></p>
+    <button id="cancel-btn" class="ghost">Stop verification (keep results so far)</button>
+  </section>
+
+  <section id="text-section" class="card" hidden>
+    <h2>1 · AI-generated-text findings</h2>
+    <p id="text-summary" class="section-summary"></p>
+    <div class="table-wrap">
+      <table id="text-table">
+        <thead>
+          <tr><th class="chk"><input type="checkbox" id="text-select-all" title="select / deselect all fixable"></th>
+          <th>Severity</th><th>File</th><th>Line</th><th>Problem</th><th>Evidence (sentence)</th><th>Fix</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="fineprint">High-severity chat artifacts are pre-selected for removal. Low-severity stylistic flags are never auto-removed — real authors use those phrases too. Matches inside quotation marks or verbatim blocks are treated as deliberate examples.</p>
+  </section>
+
+  <section id="cite-section" class="card" hidden>
+    <h2>2 · Citation verification</h2>
+    <p id="cite-summary" class="section-summary"></p>
+    <div class="table-wrap">
+      <table id="cite-table">
+        <thead>
+          <tr><th>Status</th><th>Key</th><th>Cited as</th><th>Checked against</th><th>Problem / proposed correction</th><th>Action</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="fineprint">
+      “Not found” for a journal/conference entry across all three databases is the classic signature of a fabricated
+      citation — those default to <b>remove</b> (entry + its \cite commands). Books, websites, software and theses are
+      marked <b>unverifiable</b>, never auto-removed. You can override any action before generating fixed files.
+    </p>
+  </section>
+
+  <section id="result-section" class="card" hidden>
+    <h2>3 · Report &amp; fixed files</h2>
+    <p id="fix-summary" class="section-summary"></p>
+    <div class="controls">
+      <button id="apply-btn" class="primary">Generate fixed files &amp; report</button>
+    </div>
+    <div id="downloads" class="downloads"></div>
+    <details id="changelog-details" hidden>
+      <summary>What was changed</summary>
+      <ul id="changelog"></ul>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <p>
+    Open source — <a id="repo-link" href="https://github.com/Zangir/RemoveAIwebsite" target="_blank" rel="noopener">GitHub</a>.
+    PDF findings are report-only (a PDF can’t be safely edited; fix the LaTeX source and recompile).
+    Every automated finding is a lead, not a verdict — review before resubmitting.
+  </p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

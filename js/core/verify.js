@@ -211,6 +211,15 @@ export async function verifyEntry(entry, client) {
   if (best && best.tSim >= 0.93) {
     const m = best.cand;
     if (best.aOv < 0.34 && authorLastNames(entry.author).length > 0) {
+      // For types the APIs don't index well (books, theses, software), a same-title
+      // record with different authors is usually a DIFFERENT work that happens to
+      // share a generic title ("Deep Learning") — not evidence of hallucination.
+      if (!isIndexableType(entry.type)) {
+        return {
+          status: 'unverifiable', matched: null, corrections: [], checkedSources,
+          note: `A record titled “${m.title}” (${m.source}) exists but with different authors — likely a different work sharing this title. @${entry.type || 'misc'} entries are poorly covered by scholarly APIs; verify manually.`,
+        };
+      }
       return {
         status: 'suspect', matched: m, checkedSources,
         corrections: [{ field: 'author', current: entry.author, correct: m.authors.join(' and ') }],

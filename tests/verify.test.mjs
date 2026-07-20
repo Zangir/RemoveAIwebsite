@@ -225,3 +225,27 @@ test('guessTitle: quoted titles and segment-based guesses', () => {
   const g = guessTitle('A. Author and B. Buthor. Efficient sparse attention for long documents. In ACL, 2021.');
   assert.ok(g && g.includes('sparse attention'));
 });
+
+test('generic-title book matching a different work stays unverifiable, not suspect', async () => {
+  const f = mockFetch([
+    ['semanticscholar', {
+      data: [{
+        title: 'Deep Learning',
+        authors: [{ name: 'Yann LeCun' }, { name: 'Yoshua Bengio' }, { name: 'Geoffrey Hinton' }],
+        year: 2015, externalIds: { DOI: '10.1038/nature14539' }, venue: 'Nature',
+      }],
+    }],
+    ['crossref', { message: { items: [] } }],
+    ['openalex', { results: [] }],
+  ]);
+  const r = await verifyEntry({
+    type: 'book', key: 'goodfellow16', title: 'Deep Learning',
+    author: 'Goodfellow, Ian and Courville, Aaron', year: '2016', doi: null, arxivId: null,
+  }, fastClient(f));
+  assert.equal(r.status, 'unverifiable');
+  const article = await verifyEntry({
+    type: 'article', key: 'x', title: 'Deep Learning',
+    author: 'Nobody, Fake and Person, Invented', year: '2015', doi: null, arxivId: null,
+  }, fastClient(f));
+  assert.equal(article.status, 'suspect');
+});

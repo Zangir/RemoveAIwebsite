@@ -211,7 +211,9 @@ async function verifyAll() {
   for (let i = 0; i < targets.length; i++) {
     if (state.cancelled) {
       for (const t of targets.slice(i)) {
-        state.citationResults.push({ ...t, status: 'skipped', corrections: [], checkedSources: [], note: 'Verification stopped by user.', action: 'keep' });
+        const res = { ...t, status: 'skipped', corrections: [], checkedSources: [], note: 'Verification stopped by user.', action: 'keep' };
+        state.citationResults.push(res);
+        renderCitationRow(res);
       }
       break;
     }

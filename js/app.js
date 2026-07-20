@@ -437,6 +437,14 @@ function applyFixes() {
   }
   $('changelog-details').hidden = false;
   $('fix-summary').textContent = `Done. ${changelog.length} change(s) applied across ${outFiles.filter((f) => f.changed).length} file(s). PDFs are report-only — fix the LaTeX source and recompile.`;
+
+  const nProblems = state.textFindings.filter((f) => f.severity !== 'low').length +
+    state.citationResults.filter((r) => ['notfound', 'suspect', 'fixable'].includes(r.status)).length;
+  const shareText = nProblems > 0
+    ? `Checked my paper for AI-generated text artifacts and hallucinated citations before submitting — caught ${nProblems} problem(s). Free, runs in the browser, no GenAI:`
+    : 'Checked my paper for AI-generated text artifacts and hallucinated citations before submitting — all clean. Free, runs in the browser, no GenAI:';
+  $('share-x').href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://zangir.github.io/RemoveAIwebsite/')}`;
+  $('share-row').hidden = false;
 }
 
 function fixedName(name) {

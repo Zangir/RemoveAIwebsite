@@ -68,3 +68,9 @@ test('isCommentedAt respects escaped percent', () => {
   const s = '95\\% sure \\cite{x}';
   assert.equal(isCommentedAt(s, s.indexOf('\\cite')), false);
 });
+
+test('%-commented \\bibitem is not parsed (user-reported class)', () => {
+  const bbl = '\\bibitem{live} A. Author. Real paper. 2020.\n% \\bibitem{dead} B. Buthor. Disabled item. 2021.';
+  const items = parseTheBibliography(bbl);
+  assert.deepEqual(items.map((i) => i.key), ['live']);
+});

@@ -20,6 +20,7 @@ const state = {
   crossRefInfo: null,
   cancelled: false,
   scanned: false,
+  scanning: false,
 };
 
 const KIND_BY_EXT = { tex: 'tex', latex: 'tex', bib: 'bib', bbl: 'bbl', pdf: 'pdf', txt: 'txt' };
@@ -62,6 +63,12 @@ $('apply-btn').addEventListener('click', applyFixes);
 async function addFiles(list) {
   const msg = $('upload-msg');
   msg.classList.remove('error');
+  if (state.scanning) {
+    msg.textContent = 'A scan is running — stop it (or let it finish) before changing files.';
+    msg.classList.add('error');
+    return;
+  }
+  let added = 0;
   for (const f of list) {
     const ext = (f.name.split('.').pop() || '').toLowerCase();
     const kind = KIND_BY_EXT[ext];
@@ -75,16 +82,21 @@ async function addFiles(list) {
       if (kind === 'pdf') {
         const buf = await f.arrayBuffer();
         state.files.push({ name: f.name, kind, size: f.size, buf, text: null });
+        added++;
       } else {
         const buf = await f.arrayBuffer();
         let text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
         if (text.includes('\uFFFD')) text = new TextDecoder('windows-1252').decode(buf); // common for old .bib
         if (/[\u0000-\u0008\u000B\u000E-\u001F]/.test(text.slice(0, 2000))) { msg.textContent = `Skipped "${f.name}" — looks binary, not text.`; msg.classList.add('error'); continue; }
         state.files.push({ name: f.name, kind, size: f.size, text });
+        added++;
       }
     } catch (e) {
       msg.textContent = `Could not read "${f.name}": ${e.message}`; msg.classList.add('error');
     }
+  }
+  if (added && state.scanned) {
+    msg.textContent = 'Files changed — press “Re-scan files” to refresh the results below (they show the previous scan).';
   }
   renderFileList();
 }
@@ -97,23 +109,56 @@ function renderFileList() {
     li.innerHTML = `<span class="kind">${esc(f.kind)}</span> <span>${esc(f.name)}</span>
       <span class="size">${fmtSize(f.size)}</span> <button title="remove" aria-label="remove ${esc(f.name)}">✕</button>`;
     li.querySelector('button').addEventListener('click', () => {
+      if (state.scanning) return;
       state.files = state.files.filter((x) => x !== f);
+      if (state.scanned) $('upload-msg').textContent = 'Files changed — press “Re-scan files” to refresh the results below.';
       renderFileList();
     });
     ul.appendChild(li);
   }
-  $('scan-btn').disabled = state.files.length === 0 || state.scanned;
+  $('scan-btn').disabled = state.files.length === 0 || state.scanning;
+  $('scan-btn').textContent = state.scanned ? 'Re-scan files' : 'Scan files';
 }
 
 // ---------------------------------------------------------------- scan
 
+/** Wipe results of a previous scan so a re-scan starts clean. */
+function resetResults() {
+  state.textFindings = [];
+  state.citationTargets = [];
+  state.citationResults = [];
+  state.crossRefInfo = null;
+  state.cancelled = false;
+  $('text-table').querySelector('tbody').innerHTML = '';
+  $('cite-table').querySelector('tbody').innerHTML = '';
+  $('text-section').querySelectorAll('.notice').forEach((el) => el.remove());
+  ['text-section', 'cite-section', 'result-section', 'changelog-details', 'share-row'].forEach((id) => { $(id).hidden = true; });
+  $('downloads').innerHTML = '';
+  $('changelog').innerHTML = '';
+  $('text-select-all').checked = false;
+  $('upload-msg').textContent = '';
+  setProgress(0, '');
+}
+
 async function runScan() {
-  state.scanned = true;
-  $('scan-btn').disabled = true;
+  if (state.scanning || state.files.length === 0) return;
+  state.scanning = true;
+  resetResults();
+  renderFileList(); // disables scan button, shows current label
   $('reset-btn').hidden = false;
   $('progress-section').hidden = false;
   setProgress(0, 'Reading files…');
+  try {
+    await doScan();
+  } finally {
+    state.scanning = false;
+    state.scanned = true;
+    $('progress-section').hidden = true;
+    renderFileList(); // re-enables as "Re-scan files"
+  }
+}
 
+async function doScan() {
   const warnings = [];
 
   // 1. extract PDF text
@@ -267,7 +312,7 @@ function renderTextFindings() {
       <td class="chk">${fixable ? `<input type="checkbox" ${f.selected ? 'checked' : ''}>` : ''}</td>
       <td><span class="badge ${f.severity}">${f.severity}</span></td>
       <td><code>${esc(f.file)}</code></td>
-      <td>${f.line}${f.inComment ? ' <small>(comment)</small>' : ''}${f.quoted ? ' <small>(quoted)</small>' : ''}</td>
+      <td>${f.line}${f.inComment ? ' <small>(comment)</small>' : ''}${f.quoted ? ` <small>(${esc(f.reviewReason || 'quoted')})</small>` : ''}</td>
       <td>${esc(f.description)}</td>
       <td><span class="evidence">${evidence}</span></td>
       <td>${f.pdfOnly ? 'report only (PDF)' : esc(fixLabelUI(f))}</td>`;
@@ -276,7 +321,8 @@ function renderTextFindings() {
     tb.appendChild(tr);
   }
 
-  $('text-select-all').addEventListener('change', (e) => {
+  // property assignment (not addEventListener) so re-scans don't stack handlers
+  $('text-select-all').onchange = (e) => {
     const on = e.target.checked;
     tb.querySelectorAll('input[type=checkbox]').forEach((cb, idx) => {
       cb.checked = on;
@@ -284,7 +330,7 @@ function renderTextFindings() {
       if (fixables[idx]) fixables[idx].selected = on;
     });
     updateFixSummary();
-  });
+  };
 }
 
 function fixLabelUI(f) {

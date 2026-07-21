@@ -77,6 +77,7 @@ export function parseTheBibliography(src) {
   const itemRe = /\\bibitem\s*(?:\[((?:[^\[\]]|\[[^\]]*\])*)\])?\s*\{([^}]*)\}/g;
   let im, prev = null;
   while ((im = itemRe.exec(scope))) {
+    if (isCommentedAt(src, base + im.index)) continue; // "%\bibitem{disabled}" is not an item
     if (prev) prev.text = cleanBibitemText(scope.slice(prev._textStart, im.index));
     const item = {
       key: im[2].trim(),

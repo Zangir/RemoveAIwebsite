@@ -57,6 +57,14 @@ export function parseBib(src) {
   while (i < n) {
     const at = src.indexOf('@', i);
     if (at === -1) break;
+    // "%"-commented lines: classic BibTeX has no % comments, but biber/JabRef
+    // (and humans disabling entries) treat them as comments — so must we.
+    // An @ preceded by an unescaped % on the same line starts nothing.
+    if (isPercentCommented(src, at)) {
+      const eol = src.indexOf('\n', at);
+      i = eol === -1 ? n : eol + 1;
+      continue;
+    }
     i = at + 1;
     const typeM = /^[a-zA-Z]+/.exec(src.slice(i));
     if (!typeM) continue;
@@ -79,6 +87,14 @@ export function parseBib(src) {
     while (j < n) {
       const c = src[j];
       if (c === '\\') { j += 2; continue; }
+      // A raw % at field level (depth 1, i.e. between fields — not inside a
+      // {braced value}, where "50% better" is data) comments out the rest of
+      // the line, including any braces it contains.
+      if (c === '%' && depth === 1 && close === '}') {
+        const eol = src.indexOf('\n', j);
+        j = eol === -1 ? n : eol;
+        continue;
+      }
       if (c === '{') depth++;
       else if (c === '}') {
         depth--;
@@ -125,6 +141,15 @@ export function parseBib(src) {
   return { entries, strings, warnings };
 }
 
+/** True if an unescaped % appears before idx on idx's line. */
+function isPercentCommented(src, idx) {
+  const ls = src.lastIndexOf('\n', idx - 1) + 1;
+  for (let i = ls; i < idx; i++) {
+    if (src[i] === '%' && src[i - 1] !== '\\') return true;
+  }
+  return false;
+}
+
 function stripDelims(v) {
   v = v.trim();
   if ((v.startsWith('{') && v.endsWith('}')) || (v.startsWith('"') && v.endsWith('"'))) return v.slice(1, -1);
@@ -151,6 +176,12 @@ function parseEntryBody(src, type, entryStart, bodyStart, entryEnd, entries, war
   const bn = body.length;
   while (p < bn) {
     while (p < bn && /[\s,]/.test(body[p])) p++;
+    if (body[p] === '%') { // commented line inside the entry body — skip to EOL
+      const eol = body.indexOf('\n', p);
+      if (eol === -1) break;
+      p = eol + 1;
+      continue;
+    }
     const nameM = /^[\w.:+/-]+/.exec(body.slice(p));
     if (!nameM) break;
     const name = nameM[0].toLowerCase();

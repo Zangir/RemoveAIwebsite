@@ -184,3 +184,92 @@ test('"right-censored" and "right-handed" never trigger youre-right', () => {
   const r = scanText('Survival models handle you are right-censored data. Most subjects you are right-handed.');
   assert.ok(!r.findings.some((f) => f.ruleId === 'youre-right'));
 });
+
+test('straight-quoted refusal is research data, downgraded (user-reported)', () => {
+  const t = 'This paper studies model refusals. One recorded response was: "As an AI language model, I cannot browse the web." This quotation is research data and must remain in the paper.';
+  const r = scanText(t);
+  const chat = r.findings.filter((f) => f.category === 'chat-artifact');
+  assert.ok(chat.length >= 1, 'must still be reported for review');
+  for (const f of chat) {
+    assert.equal(f.selected, false, `${f.ruleId} must not be auto-selected`);
+    assert.notEqual(f.severity, 'high');
+  }
+});
+
+test('reported speech without quotation marks is downgraded', () => {
+  const t = 'The model replied that as an AI language model it could not comply. We analyze these refusals below.';
+  const r = scanText(t);
+  const f = r.findings.find((x) => x.ruleId === 'ai-self-ref');
+  assert.ok(f);
+  assert.equal(f.selected, false);
+  assert.equal(f.reviewReason, 'reported speech');
+});
+
+test('quote environment content is downgraded, not removed', () => {
+  const tex = 'We observed the following refusal:\n\\begin{quote}\nAs an AI language model, I cannot help with that request.\n\\end{quote}\nThis behavior motivates our study.';
+  const r = scanText(tex, { filetype: 'tex' });
+  const f = r.findings.find((x) => x.ruleId === 'ai-self-ref');
+  assert.ok(f, 'still reported');
+  assert.equal(f.selected, false);
+});
+
+test('\\enquote{} content is downgraded', () => {
+  const tex = 'The system said \\enquote{I hope this helps with your homework} to every user.';
+  const r = scanText(tex, { filetype: 'tex' });
+  const f = r.findings.find((x) => x.ruleId === 'hope-helps');
+  assert.ok(f);
+  assert.equal(f.selected, false);
+});
+
+test('genuine artifact with no quote/reporting context stays auto-selected', () => {
+  const t = 'As an AI language model, I cannot run the experiments myself, but the protocol is described below.';
+  const r = scanText(t);
+  const f = r.findings.find((x) => x.ruleId === 'ai-self-ref');
+  assert.ok(f);
+  assert.equal(f.severity, 'high');
+  assert.equal(f.selected, true);
+});
+
+test('balanced straight quotes BEFORE the match do not hide a genuine artifact', () => {
+  const t = 'We call this the "gold standard" setting. I hope this helps! The evaluation follows.';
+  const r = scanText(t);
+  const f = r.findings.find((x) => x.ruleId === 'hope-helps');
+  assert.ok(f);
+  assert.equal(f.selected, true, 'closed quote pair must not downgrade later matches');
+});
+
+test('chat phrases inside tabular (quoted model outputs) are review-only', () => {
+  const tex = `\\begin{tabular}{p{6cm}p{6cm}}
+[Redacted: generates steps] &
+My apologies, but I cannot provide information on that. If you have any other questions, please feel free to ask.\\\\
+\\end{tabular}`;
+  const r = scanText(tex, { filetype: 'tex' });
+  const chat = r.findings.filter((f) => f.category === 'chat-artifact');
+  assert.ok(chat.length >= 1, 'still reported');
+  for (const f of chat) assert.equal(f.selected, false, `${f.ruleId} in table must not auto-remove`);
+});
+
+test('"for example" exemplification downgrades self-reference (GPT-4 system-card style)', () => {
+  const t = 'For example, my purpose as an AI language model is to assist and provide information.';
+  const r = scanText(t);
+  const f = r.findings.find((x) => x.ruleId === 'ai-self-ref');
+  assert.ok(f);
+  assert.equal(f.selected, false);
+});
+
+test('**bold** inside \\newcommand is a macro, not markdown paste', () => {
+  const tex = '\\newcommand{\\UPD}{**UPDATE** }\nReal **pasted bold** in prose.';
+  const r = scanText(tex, { filetype: 'tex' });
+  const bolds = r.findings.filter((f) => f.ruleId === 'md-bold');
+  assert.equal(bolds.length, 2);
+  assert.equal(bolds.find((f) => f.match.includes('UPDATE')).selected, false);
+  assert.equal(bolds.find((f) => f.match.includes('pasted')).selected, true);
+});
+
+test('curly quotes and NBSP are reported but not preselected (legit in real papers)', () => {
+  const tex = 'A model is “aligned” if it is helpful. It compiles fine.';
+  const r = scanText(tex, { filetype: 'tex' });
+  const paste = r.findings.filter((f) => ['smart-quotes-tex', 'nbsp-tex'].includes(f.ruleId));
+  assert.ok(paste.length >= 3);
+  for (const f of paste) assert.equal(f.selected, false);
+});

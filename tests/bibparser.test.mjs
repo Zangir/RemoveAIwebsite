@@ -117,3 +117,60 @@ test('crossref-style field names with dashes parse', () => {
   const { entries } = parseBib('@article{x, title={T}, primaryclass={cs.CL}, archiveprefix={arXiv}}');
   assert.equal(getField(entries[0], 'primaryclass'), 'cs.CL');
 });
+
+test('fully %-commented bib file has zero entries (user-reported)', () => {
+  const src = `% @article{disabled2026,
+%   title = {This Entry Is Disabled},
+%   author = {Nobody, Nora},
+%   year = {2026}
+% }`;
+  const { entries } = parseBib(src);
+  assert.equal(entries.length, 0);
+});
+
+test('commented entry + live entry: only the live one parses (user-reported)', () => {
+  const src = `% Lines beginning with % are comments in BibTeX.
+% The disabledReference entry below should not exist as far as the scanner is concerned.
+% @misc{disabledReference,
+%   title  = {This Commented Entry Must Be Ignored},
+%   author = {Nobody, Nora},
+%   year   = {2026}
+% }
+
+% This is the only real, active entry in the file.
+@misc{liveReference,
+  note = {Control entry used to show what a real BibTeX entry looks like}
+}`;
+  const { entries } = parseBib(src);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].key, 'liveReference');
+});
+
+test('% inside a braced value is data, not a comment', () => {
+  const { entries } = parseBib('@article{p, title={Accuracy improved by 50% over baselines}, year={2020}}');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].title, 'Accuracy improved by 50% over baselines');
+  assert.equal(entries[0].year, '2020');
+});
+
+test('commented field line inside an entry is skipped; later fields survive', () => {
+  const src = '@article{x,\n  % author = {Hidden, Person},\n  title = {Visible Title},\n  year = {2021},\n}';
+  const { entries } = parseBib(src);
+  assert.equal(entries[0].title, 'Visible Title');
+  assert.equal(getField(entries[0], 'author'), undefined);
+  assert.equal(entries[0].year, '2021');
+});
+
+test('trailing % comment containing braces does not derail entry parsing', () => {
+  const src = '@article{y,\n  title = {T}, % legacy {removed} field\n  year = {1999},\n}\n@article{z, title={Z2}, year={2000}}';
+  const { entries } = parseBib(src);
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0].year, '1999');
+  assert.equal(entries[1].key, 'z');
+});
+
+test('escaped \\% before @ does not comment out the entry', () => {
+  const src = 'discount of 10\\% @article{real, title={R}, year={2020}}';
+  const { entries } = parseBib(src);
+  assert.equal(entries.length, 1);
+});

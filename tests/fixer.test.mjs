@@ -31,9 +31,14 @@ test('remove-match keeps the sentence otherwise intact', () => {
   assert.equal(r.text, 'The theorem holds for all n.');
 });
 
-test('smart-quote and markdown-bold conversion in tex', () => {
+test('smart-quote (opt-in) and markdown-bold conversion in tex', () => {
   const text = 'The “best” result is **very strong** here.';
   const { findings } = scanText(text, { filetype: 'tex' });
+  // md-bold is preselected; smart quotes are offered but unticked (legit in
+  // modern LaTeX) — simulate the user ticking them:
+  const quotes = findings.filter((f) => f.ruleId === 'smart-quotes-tex');
+  assert.ok(quotes.length === 2 && quotes.every((f) => !f.selected), 'smart quotes must be opt-in');
+  for (const f of quotes) f.selected = true;
   const r = fixText(text, findings);
   assert.equal(r.text, "The ``best'' result is \\textbf{very strong} here.");
 });

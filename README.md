@@ -34,7 +34,7 @@ Also reported: keys cited but missing from the `.bib`, entries never cited, dupl
 
 - **100% client-side.** Your files never leave the browser. Only citation titles/DOIs are sent
   to the three public scholarly APIs. Nothing is stored anywhere.
-- **Zero generative AI.** Detection is ~35 deterministic key-phrase/regex rules; verification is
+- **Zero generative AI.** Detection is 45+ deterministic key-phrase/regex rules; verification is
   database lookups with fuzzy title matching + author/year cross-checks. Every finding is
   reproducible and explainable.
 - **Minimal diffs.** Fixes are spliced into your original source — no reformatting. Download
@@ -59,7 +59,7 @@ False positives destroy trust, so the checker is deliberately paranoid about *it
 
 Tested against real arXiv papers (clean papers come out clean — the *Attention Is All You Need*
 and BERT sources produce zero high-severity findings) plus a planted-problem corpus:
-**91 unit tests + Playwright end-to-end suites**, run in CI on every push.
+**204 unit tests + Playwright end-to-end suites**, run in CI on every push.
 
 ## Honest limitations
 

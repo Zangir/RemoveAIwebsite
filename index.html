@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>verifAI — catch hallucinated citations & ChatGPT leftovers before reviewers do</title>
-<meta name="description" content="Free checker for research papers: finds AI-generated text artifacts ('As an AI language model…') and hallucinated references in .tex/.bib/.pdf, verifies every citation against 4 scholarly databases, and fixes what it finds. 100% in your browser, no GenAI.">
+<meta name="description" content="Free checker for research papers: finds AI-generated text artifacts ('As an AI language model…') and hallucinated references in .tex/.bib/.pdf, verifies every citation against all main scholarly databases, and fixes what it finds. 100% in your browser, no GenAI.">
 <meta name="keywords" content="verifAI, arXiv, AI-generated text detector, fake citations, hallucinated references, ChatGPT artifacts, LaTeX checker, BibTeX validator, citation checker">
 <link rel="canonical" href="https://zangir.github.io/verifAI/">
 <meta property="og:type" content="website">
@@ -32,17 +32,19 @@
     <p class="brand">✅ verif<span class="brand-ai">AI</span></p>
     <h1>Is your paper safe to submit?</h1>
     <p class="tagline tagline-why">
-      Even if you only used AI to <b>polish grammar</b>, it can hallucinate silently — swap a year,
-      misspell an author, invent a reference that never existed. verifAI is a <b>deterministic
-      recheck</b> (zero AI inside) of your <b>.tex / .bib / .pdf</b>: it flags obvious AI-generated
-      text and verifies every citation against four scholarly databases — catching even
-      <b>partially hallucinated</b> ones (real paper, wrong year, wrong authors, dead DOI) —
-      and hands you fixed files.
+      Even AI used only to <b>polish grammar</b> can hallucinate — swap a year, invent a reference.
+      verifAI is a <b>deterministic recheck</b> (zero AI inside) of your <b>.tex / .bib / .pdf</b>:
     </p>
+    <ul class="hero-points">
+      <li>🚩 Flags obvious <b>AI-generated text</b> (chat leftovers, placeholders, style tells)</li>
+      <li>🔎 Verifies <b>every citation</b> against all main scholarly databases</li>
+      <li>🧩 Catches <b>partial hallucinations</b> — real paper, wrong year / authors / DOI</li>
+      <li>📥 Hands you <b>fixed files</b> + a problem report</li>
+    </ul>
     <div class="hero-badges">
       <span class="hb">🔒 100% in your browser</span>
       <span class="hb">🚫 zero generative AI</span>
-      <span class="hb">🗄 4 scholarly databases</span>
+      <span class="hb">🗄 all main scholarly databases</span>
       <span class="hb">🆓 free &amp; open source</span>
     </div>
 
@@ -62,8 +64,7 @@
       </div>
     </div>
     <p class="hero-disclaimer">
-      ⚖️ verifAI gives you <b>leads, not verdicts</b> — every fix is a suggestion you review and can override.
-      Your files never leave the browser; only citation titles are sent to public scholarly APIs.
+      ⚖️ <b>Leads, not verdicts</b> — you review every fix. Files never leave your browser.
     </p>
   </div>
 </header>
@@ -103,7 +104,11 @@
         <tbody></tbody>
       </table>
     </div>
-    <p class="fineprint">High-severity chat artifacts are pre-selected for removal. Low-severity stylistic flags are never auto-removed — real authors use those phrases too. Matches inside quotation marks, tables or verbatim blocks are treated as deliberate examples.</p>
+    <ul class="fineprint fineprint-list">
+      <li><b>High</b> (chat artifacts) — pre-selected for removal</li>
+      <li><b>Low</b> (style tells: em-dashes, semicolons, stock phrases) — flagged only, never auto-removed</li>
+      <li>Quoted / table / verbatim matches — treated as deliberate examples, review-only</li>
+    </ul>
   </section>
 
   <section id="cite-section" class="card" hidden>
@@ -118,15 +123,12 @@
         <tbody></tbody>
       </table>
     </div>
-    <p class="fineprint">
-      <b>Action on generate</b> is what happens to each entry when you press “Generate fixed files”:
-      <b>keep unchanged</b> (nothing happens) · <b>auto-correct fields</b> (year/DOI/authors fixed from the matched record) ·
-      <b>delete entry + its \cite</b> (removed from the .bib and every \cite command). It is preset from the status and you can override it.
-      “Not found” across all four databases (Semantic Scholar, CrossRef — which carries the full ACM catalog —, OpenAlex, DBLP — which carries the ACL Anthology)
-      is the classic signature of a fabricated citation. Books, websites, software and theses are marked <b>unverifiable</b>, never auto-removed.
-      For unmatched entries, use the <b>search ↗ links</b> in the row to check Google Scholar, ACM DL or ResearchGate manually
-      (those sites block automated queries, so verifAI can’t query them for you).
-    </p>
+    <ul class="fineprint fineprint-list">
+      <li><b>Action on generate</b> — what happens when you press “Generate”: <b>keep</b> · <b>auto-correct fields</b> · <b>delete entry + its \cite</b>. Preset from the status; override freely.</li>
+      <li><b>Not found</b> in all main databases = classic signature of a fabricated citation</li>
+      <li>Books / websites / software → <b>unverifiable</b>, never auto-removed</li>
+      <li>Unmatched? Use the row’s <b>search ↗ links</b> (Google Scholar, ACM DL, ResearchGate)</li>
+    </ul>
   </section>
 
   <section id="result-section" class="card" hidden>
@@ -184,9 +186,6 @@
 <footer>
   <p>
     Open source (MIT) — <a id="repo-link" href="https://github.com/Zangir/verifAI" target="_blank" rel="noopener">GitHub</a>.
-    Verification: Semantic Scholar · CrossRef (incl. the ACM catalog) · OpenAlex · DBLP (incl. the ACL Anthology); arXiv is covered through
-    Semantic Scholar/OpenAlex/DBLP and direct arXiv-ID resolution — arXiv’s own API and sites like ResearchGate block browser requests.
-    PDF findings are report-only (a PDF can’t be safely edited; fix the LaTeX source and recompile).
     <b>Disclaimer:</b> every automated finding is a lead, not a verdict — review the report before resubmitting; you are responsible for your paper.
   </p>
 </footer>

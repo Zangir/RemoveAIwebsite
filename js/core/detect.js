@@ -172,6 +172,9 @@ export const RULES = [
   R('smart-quotes-tex', 'paste-artifact', 'medium', /[“”‘’]/g,
     FIX.CONVERT, 'Curly quotes in LaTeX source (may be pasted text; compile fine with UTF-8 — fix optional)',
     { texOnly: true, convert: (m) => ({ '“': '``', '”': "''", '‘': '`', '’': "'" }[m]), preselect: false }),
+  R('bullet-tex', 'paste-artifact', 'medium', /[•‣▪◦]/g,
+    FIX.FLAG, 'Literal bullet character in LaTeX source — LaTeX authors write \\item; a • is typical of pasted chat output',
+    { texOnly: true }),
 
   // ---- LOW: stylistic tells (flag only) ----
   R('style-phrases', 'style', 'low',
@@ -348,6 +351,36 @@ export function scanText(text, opts = {}) {
     });
   }
 
+  // ---- metrics: semicolon density (AI clause-chaining tell) ----
+  // real-paper calibration maximum: 15.2/1000 (BERT appendix) — threshold 20
+  const semis = (text.match(/;/g) || []).length;
+  const semiPer1000 = words ? (semis / words) * 1000 : 0;
+  if (words > 200 && semis >= 8 && semiPer1000 > 20) {
+    findings.push({
+      id: `f${n++}`, ruleId: 'semicolon-density', category: 'style', severity: 'low',
+      description: `High semicolon density: ${semis} in ${words} words (${semiPer1000.toFixed(1)}/1000; real papers measure under ~15/1000) — a common LLM clause-chaining pattern`,
+      fix: FIX.FLAG, convert: null, match: ';', start: 0, end: 0,
+      sentenceStart: 0, sentenceEnd: 0, line: 1, context: '(document-level metric)',
+      quoted: false, reviewReason: null, inComment: false, file: opts.file || '', selected: false,
+    });
+  }
+
+  // ---- metrics: sentence-initial transition-word density ----
+  // real-paper calibration maximum: 10% (GPT-4 report) — threshold 18%
+  const sentences = text.split(/[.!?]\s+/).filter((s) => s.trim().length > 20);
+  const TRANSITION_RE = /^(?:furthermore|moreover|additionally|notably|importantly|crucially|significantly|overall|in\s+conclusion|in\s+summary|in\s+essence|ultimately)\b/i;
+  const transHits = sentences.filter((s) => TRANSITION_RE.test(s.trim())).length;
+  const transRatio = sentences.length ? transHits / sentences.length : 0;
+  if (sentences.length >= 8 && transHits >= 3 && transRatio > 0.18) {
+    findings.push({
+      id: `f${n++}`, ruleId: 'transition-density', category: 'style', severity: 'low',
+      description: `${transHits} of ${sentences.length} sentences open with stock transitions (Furthermore/Moreover/Additionally…) — ${(transRatio * 100).toFixed(0)}%, vs under ~10% in real papers; a strong LLM cadence tell`,
+      fix: FIX.FLAG, convert: null, match: '', start: 0, end: 0,
+      sentenceStart: 0, sentenceEnd: 0, line: 1, context: '(document-level metric)',
+      quoted: false, reviewReason: null, inComment: false, file: opts.file || '', selected: false,
+    });
+  }
+
   // low-severity style phrases: if a document has many, raise a document-level note
   const styleCount = findings.filter((f) => f.ruleId === 'style-phrases').length;
   if (styleCount >= 5) {
@@ -361,5 +394,13 @@ export function scanText(text, opts = {}) {
   }
 
   findings.sort((a, b) => a.start - b.start);
-  return { findings, metrics: { words, emDashes, emDashPer1000: +per1000.toFixed(2), stylePhraseCount: styleCount } };
+  return {
+    findings,
+    metrics: {
+      words, emDashes, emDashPer1000: +per1000.toFixed(2),
+      semicolonsPer1000: +semiPer1000.toFixed(2),
+      transitionStarterRatio: +transRatio.toFixed(3),
+      stylePhraseCount: styleCount,
+    },
+  };
 }

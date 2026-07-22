@@ -273,3 +273,40 @@ test('curly quotes and NBSP are reported but not preselected (legit in real pape
   assert.ok(paste.length >= 3);
   for (const f of paste) assert.equal(f.selected, false);
 });
+
+test('semicolon density fires on AI clause-chaining, silent on real rates', () => {
+  const aiish = ('The model learns representations; it refines them; results improve; ' +
+    'we observe gains; the effect persists; ablations confirm this; performance holds. ').repeat(8) + 'word '.repeat(120);
+  const r1 = scanText(aiish);
+  assert.ok(r1.findings.some((f) => f.ruleId === 'semicolon-density'));
+  const real = ('We evaluate on three benchmarks and report mean accuracy. ').repeat(40) + 'One caveat applies; details follow. ';
+  const r2 = scanText(real);
+  assert.ok(!r2.findings.some((f) => f.ruleId === 'semicolon-density'));
+});
+
+test('transition-starter density fires on LLM cadence, silent on real papers', () => {
+  const aiish = 'Furthermore, the model improves accuracy across the board today. ' +
+    'Moreover, the latency decreases with additional caching layers enabled. ' +
+    'Additionally, the memory footprint remains stable during long runs. ' +
+    'Notably, these results generalize across all evaluated domains here. ' +
+    'The experiments used three seeds for statistical robustness overall. ' +
+    'Importantly, no regressions were observed in the control condition. ' +
+    'We also report per-task breakdowns in the appendix tables below. ' +
+    'Overall, the approach is practical for production deployments now. ';
+  const r1 = scanText(aiish);
+  assert.ok(r1.findings.some((f) => f.ruleId === 'transition-density'), JSON.stringify(r1.metrics));
+  const real = ('We train the model on the standard split and evaluate accuracy. ' +
+    'The baseline uses identical hyperparameters for a fair comparison. ').repeat(6) +
+    'Furthermore, we analyze failure cases. Moreover, costs stay flat. ';
+  const r2 = scanText(real);
+  assert.ok(!r2.findings.some((f) => f.ruleId === 'transition-density'));
+});
+
+test('literal bullets flagged in .tex only (PDF itemize rendering is legit)', () => {
+  const t = 'Key points:\n• fast\n• private\n• free\n';
+  const inTex = scanText(t, { filetype: 'tex' });
+  assert.equal(inTex.findings.filter((f) => f.ruleId === 'bullet-tex').length, 3);
+  assert.ok(inTex.findings.every((f) => f.ruleId !== 'bullet-tex' || !f.selected), 'flag-only');
+  const inTxt = scanText(t, { filetype: 'txt' });
+  assert.ok(!inTxt.findings.some((f) => f.ruleId === 'bullet-tex'));
+});

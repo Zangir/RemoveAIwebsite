@@ -271,3 +271,25 @@ test('circuit breaker: a persistently rate-limited host is benched, others still
   assert.equal(r3.status, 'verified');
   assert.equal(s2Attempts, after, 'benched host must not be called');
 });
+
+test('typo title with corroborating authors+year → fixable with title correction', async () => {
+  const f = mockFetch([
+    // strict match endpoint finds nothing; relevance search does
+    ['search/match', { data: [] }],
+    ['paper/search?', { data: [{
+      title: 'Attention Is All You Need',
+      authors: [{ name: 'Ashish Vaswani' }, { name: 'Noam Shazeer' }],
+      year: 2017, externalIds: { ArXiv: '1706.03762' }, venue: 'NeurIPS',
+    }] }],
+    ['crossref', { message: { items: [] } }],
+    ['dblp.org', { result: { hits: {} } }],
+    ['openalex', { results: [] }],
+  ]);
+  const r = await verifyEntry({
+    type: 'inproceedings', key: 't', title: 'Atention is alll you need',
+    author: 'Vaswani, Ashish and Shazeer, Noam', year: '2017', doi: null, arxivId: null,
+  }, fastClient(f));
+  assert.equal(r.status, 'fixable', JSON.stringify(r));
+  const tc = r.corrections.find((c) => c.field === 'title');
+  assert.equal(tc?.correct, 'Attention Is All You Need');
+});

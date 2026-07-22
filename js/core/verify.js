@@ -277,7 +277,10 @@ export async function verifyEntry(entry, client, prefetch) {
   if (entry.title && need()) {
     const p = await tryStep('Semantic Scholar', async () => {
       const r = await client.call('s2', `/graph/v1/paper/search/match?query=${encodeURIComponent(entry.title)}&fields=${S2_FIELDS}`);
-      return r?.data?.[0];
+      if (r?.data?.[0]) return r.data[0];
+      // the match endpoint is strict; relevance search tolerates typos
+      const rel = await client.call('s2', `/graph/v1/paper/search?query=${encodeURIComponent(normalizeTitle(entry.title))}&limit=3&fields=${S2_FIELDS}`);
+      return rel?.data?.[0];
     });
     const c = candFromS2(p);
     if (c) candidates.push(c);
@@ -340,6 +343,9 @@ export async function verifyEntry(entry, client, prefetch) {
       corrections.push({ field: 'doi', current: entry.doi, correct: m.doi });
     }
     if (doiDead && m.doi) corrections.push({ field: 'doi', current: entry.doi, correct: m.doi });
+    if (entry.arxivId && m.arxivId && entry.arxivId !== m.arxivId) {
+      corrections.push({ field: 'eprint', current: entry.arxivId, correct: m.arxivId });
+    }
     if (best.aOv < 0.99 && best.aOv >= 0.34 && m.authors.length) {
       corrections.push({ field: 'author', current: entry.author, correct: m.authors.join(' and '), soft: true });
     }
@@ -350,6 +356,17 @@ export async function verifyEntry(entry, client, prefetch) {
       status: corrections.some((c) => !c.soft) ? 'fixable' : 'verified',
       matched: m, corrections, checkedSources,
       note: corrections.length ? '' : `Confirmed by ${m.source}.`,
+    };
+  }
+
+  // Partially hallucinated TITLE: authors and year corroborate a record whose
+  // title only loosely matches — same paper, defective title. Correct it.
+  if (best && best.tSim >= 0.72 && best.aOv >= 0.5 && best.yDiff !== null && best.yDiff <= 1) {
+    const m = best.cand;
+    return {
+      status: 'fixable', matched: m, checkedSources,
+      corrections: [{ field: 'title', current: entry.title, correct: m.title }],
+      note: `Authors and year match “${m.title}” (${m.source}) but the cited title differs (${(best.tSim * 100).toFixed(0)}% similarity) — likely mistyped or partially hallucinated.`,
     };
   }
 
@@ -391,6 +408,8 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
 
   const guessedTitle = guessTitle(text);
   const normText = normalizeTitle(text);
+  const refYears = (text.match(/\b(?:19|20)\d{2}\b/g) || []).map(Number);
+  const yearAgrees = (c) => !c.year || !refYears.length || refYears.some((y) => Math.abs(y - c.year) <= 1);
   const scoreCand = (c) => {
     const sim = titleSimilarity(guessedTitle || text, c.title);
     const nt = normalizeTitle(c.title);
@@ -402,7 +421,21 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
     return contained ? Math.max(sim, 0.95) : sim;
   };
   let bestScore = 0, best = null;
-  const consider = (c) => { if (!c) return; const s = scoreCand(c); if (s > bestScore) { bestScore = s; best = c; } };
+  const consider = (c) => {
+    if (!c) return;
+    const s = scoreCand(c);
+    if (!best) { best = c; bestScore = s; return; }
+    // same-title collisions (reprints): when title scores are comparable,
+    // prefer the record whose year the reference itself corroborates
+    if (yearAgrees(c) !== yearAgrees(best) && Math.abs(s - bestScore) <= 0.05) {
+      if (yearAgrees(c)) { best = c; bestScore = s; }
+      return;
+    }
+    if (s > bestScore) { best = c; bestScore = s; }
+  };
+  // a best match whose year the reference contradicts is not settled — keep
+  // consulting sources (the right record, e.g. non-reprint, may still come)
+  const settled = () => bestScore >= 0.93 && best && yearAgrees(best);
 
   // ---- 0. arXiv id in the reference: resolve it directly (strongest evidence).
   // S2 first; DBLP indexes every arXiv preprint as CoRR and finds the number
@@ -460,21 +493,25 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
 
   // ---- 2. title search: S2 → DBLP → OpenAlex ----
   const q = guessedTitle || text.replace(/^\[[^\]]*\]\s*/, '').split(/\s+/).slice(0, 14).join(' ');
-  if (bestScore < 0.93 && q) {
+  if (!settled() && q) {
     try {
       const r = await client.call('s2', `/graph/v1/paper/search/match?query=${encodeURIComponent(q)}&fields=${S2_FIELDS}`);
       checkedSources.push('Semantic Scholar');
       consider(candFromS2(r?.data?.[0]));
+      if (!settled()) {
+        const rel = await client.call('s2', `/graph/v1/paper/search?query=${encodeURIComponent(normalizeTitle(q))}&limit=3&fields=${S2_FIELDS}`);
+        for (const p of rel?.data || []) consider(candFromS2(p));
+      }
     } catch { /* continue */ }
   }
-  if (bestScore < 0.93 && q) {
+  if (!settled() && q) {
     try {
       const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(dblpQuery(q))}&format=json&h=3`);
       checkedSources.push('DBLP');
       for (const h of r?.result?.hits?.hit || []) consider(candFromDblp(h));
     } catch { /* continue */ }
   }
-  if (bestScore < 0.93 && guessedTitle) {
+  if (!settled() && guessedTitle) {
     try {
       const r = await client.call('openalex', `/works?search=${encodeURIComponent(normalizeTitle(guessedTitle))}&per-page=3`);
       checkedSources.push('OpenAlex');
@@ -486,7 +523,7 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
   // cleaned "openended" breaks word matching. If the cleaned query found
   // nothing, retry with the title guessed from the raw (pre-clean) text,
   // whose "open- ended" normalizes to the correct "open ended" tokens.
-  if (bestScore < 0.93 && rawText) {
+  if (!settled() && rawText) {
     const g2 = guessTitle(rawText.replace(/\s+/g, ' ').trim().slice(0, 900));
     if (g2 && normalizeTitle(g2) !== normalizeTitle(guessedTitle || '')) {
       try {
@@ -505,7 +542,29 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
   }
 
   if (!checkedSources.length) return { status: 'error', matched: null, corrections: [], checkedSources, note: 'All lookups failed.' };
-  if (best && bestScore >= 0.93) return { status: 'verified', matched: best, corrections: [], checkedSources, note: `Matched “${best.title}” (${best.source}).` };
+  if (best && bestScore >= 0.93) {
+    // A matching TITLE is not enough — partially hallucinated references keep
+    // a real title but carry the wrong year or invented authors. Cross-check
+    // both against the reference text itself.
+    const issues = [];
+    if (best.year) {
+      const refYear = (text.match(/\b(?:19|20)\d{2}[a-z]?\b/g) || []).map((y) => parseInt(y));
+      if (refYear.length && !refYear.some((y) => Math.abs(y - best.year) <= 1)) {
+        issues.push(`the record says ${best.year} but the reference says ${refYear.join('/')}`);
+      }
+    }
+    const leadNames = candidateLastNames(best).slice(0, 3).filter((n) => n.length > 3);
+    if (leadNames.length && !leadNames.some((n) => normText.includes(n))) {
+      issues.push(`none of the record’s lead authors (${leadNames.join(', ')}) appear in the reference — possible hallucinated authorship`);
+    }
+    if (axId && best.arxivId && best.arxivId !== axId) {
+      issues.push(`the reference cites arXiv:${axId} but the matched record is arXiv:${best.arxivId}`);
+    }
+    if (issues.length) {
+      return { status: 'suspect', matched: best, corrections: [], checkedSources, note: `Title matches “${best.title}” (${best.source}), but ${issues.join('; ')}.` };
+    }
+    return { status: 'verified', matched: best, corrections: [], checkedSources, note: `Matched “${best.title}” (${best.source}).` };
+  }
   if (best && bestScore >= 0.75) {
     return { status: 'suspect', matched: best, corrections: [], checkedSources, note: `Closest match “${best.title}” (${best.source}) at ${(bestScore * 100).toFixed(0)}% similarity — check manually.` };
   }
@@ -517,7 +576,9 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
 // (The acronym case — "In NeurIPS" — is checked case-SENSITIVELY: under /i,
 // [A-Z]{2,} would also match "In defense".)
 const VENUE_RE = /^(?:in(?::|\s+(?:proc|proceedings|the|advances|findings|international|annual|\d))|proc\b|proceedings\b|pages?\b|vol(?:ume)?\b|arxiv|journal\b|transactions\b|technical report\b|mit press\b|springer\b)/i;
-const VENUE_ACRONYM_RE = /^In\s+[A-Z]{2,}\b/;
+// a word with 2+ capitals (NeurIPS, EMNLP, CoRL, ICML) or a leading digit is
+// a venue; "In Defense of..." (one capital) is a legitimate title
+const VENUE_ACRONYM_RE = /^In\s+(?:[A-Z][\w'-]*[A-Z]|\d)/;
 const isVenue = (p) => VENUE_RE.test(p) || VENUE_ACRONYM_RE.test(p);
 
 /** Guess the title inside a free-form reference: quoted span, or the segment between period-boundaries. */

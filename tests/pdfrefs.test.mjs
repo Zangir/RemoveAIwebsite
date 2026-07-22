@@ -292,3 +292,65 @@ test('PDF line-break hyphenation is undone in extracted references', () => {
   // genuine compounds keep their hyphen when not followed by a space
   assert.ok(items[0].text.includes('Program-aided'));
 });
+
+// ---- adversarial recall: partially hallucinated PDF references ----
+const ATTN_S2 = { data: [{
+  title: 'Attention Is All You Need',
+  authors: [{ name: 'Ashish Vaswani' }, { name: 'Noam Shazeer' }, { name: 'Niki Parmar' }],
+  year: 2017, externalIds: { ArXiv: '1706.03762' }, venue: 'NeurIPS',
+}] };
+
+test('freeform: real title but WRONG YEAR → suspect, not verified', async () => {
+  const f = mockFetch([['semanticscholar', ATTN_S2], ['crossref', { message: { items: [] } }], ['dblp.org', { result: { hits: {} } }], ['openalex', { results: [] }]]);
+  const r = await verifyFreeform(
+    'Ashish Vaswani, Noam Shazeer, et al. Attention is all you need. In NeurIPS, 2013.',
+    fastClient(f));
+  assert.equal(r.status, 'suspect');
+  assert.ok(/2017/.test(r.note) && /2013/.test(r.note), r.note);
+});
+
+test('freeform: real title but INVENTED AUTHORS → suspect', async () => {
+  const f = mockFetch([['semanticscholar', ATTN_S2], ['crossref', { message: { items: [] } }], ['dblp.org', { result: { hits: {} } }], ['openalex', { results: [] }]]);
+  const r = await verifyFreeform(
+    'Maria Gonzalez, Wei Chen, and Emily Johnson. Attention is all you need. In NeurIPS, 2017.',
+    fastClient(f));
+  assert.equal(r.status, 'suspect');
+  assert.ok(/hallucinated authorship/.test(r.note), r.note);
+});
+
+test('freeform: wrong arXiv id spliced onto a real reference → suspect', async () => {
+  const f = mockFetch([
+    ['paper/arXiv:1512.03385', { title: 'Deep Residual Learning for Image Recognition', authors: [{ name: 'Kaiming He' }], year: 2015, externalIds: { ArXiv: '1512.03385' } }],
+    ['semanticscholar', ATTN_S2],
+    ['crossref', { message: { items: [] } }], ['dblp.org', { result: { hits: {} } }], ['openalex', { results: [] }],
+  ]);
+  const r = await verifyFreeform(
+    'Ashish Vaswani, Noam Shazeer, et al. Attention is all you need. arXiv preprint arXiv:1512.03385, 2017.',
+    fastClient(f));
+  assert.equal(r.status, 'suspect');
+  assert.ok(/arXiv:1512.03385/.test(r.note) && /arXiv:1706.03762/.test(r.note), r.note);
+});
+
+test('freeform: et-al truncated author lists do NOT trigger the author check', async () => {
+  const f = mockFetch([['semanticscholar', ATTN_S2], ['crossref', { message: { items: [] } }], ['dblp.org', { result: { hits: {} } }], ['openalex', { results: [] }]]);
+  const r = await verifyFreeform(
+    'Ashish Vaswani et al. Attention is all you need. In NeurIPS, 2017.',
+    fastClient(f));
+  assert.equal(r.status, 'verified');
+});
+
+test('bib entry: wrong eprint (arXiv id of a different paper) gets a correction', async () => {
+  const { verifyEntry } = await import('../js/core/verify.js');
+  const f = mockFetch([
+    ['paper/arXiv:1512.03385', { title: 'Deep Residual Learning for Image Recognition', authors: [{ name: 'Kaiming He' }], year: 2015, externalIds: { ArXiv: '1512.03385' } }],
+    ['semanticscholar', ATTN_S2],
+    ['crossref', { message: { items: [] } }], ['dblp.org', { result: { hits: {} } }], ['openalex', { results: [] }],
+  ]);
+  const r = await verifyEntry({
+    type: 'inproceedings', key: 'v17', title: 'Attention is all you need',
+    author: 'Vaswani, Ashish and Shazeer, Noam', year: '2017', doi: null, arxivId: '1512.03385',
+  }, fastClient(f));
+  assert.equal(r.status, 'fixable');
+  const ec = r.corrections.find((c) => c.field === 'eprint');
+  assert.ok(ec && ec.correct === '1706.03762', JSON.stringify(r.corrections));
+});

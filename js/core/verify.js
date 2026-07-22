@@ -421,9 +421,11 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
     return contained ? Math.max(sim, 0.95) : sim;
   };
   let bestScore = 0, best = null;
+  let bestOkScore = 0, bestOk = null; // best among year-corroborated candidates
   const consider = (c) => {
     if (!c) return;
     const s = scoreCand(c);
+    if (yearAgrees(c) && s > bestOkScore) { bestOk = c; bestOkScore = s; }
     if (!best) { best = c; bestScore = s; return; }
     // same-title collisions (reprints): when title scores are comparable,
     // prefer the record whose year the reference itself corroborates
@@ -542,6 +544,9 @@ export async function verifyFreeform(refText, client, prefetch, rawText) {
   }
 
   if (!checkedSources.length) return { status: 'error', matched: null, corrections: [], checkedSources, note: 'All lookups failed.' };
+  // a reprint may outscore the original slightly; if a year-corroborated
+  // record also cleared the bar, judge against THAT one
+  if (best && !yearAgrees(best) && bestOk && bestOkScore >= 0.93) { best = bestOk; bestScore = bestOkScore; }
   if (best && bestScore >= 0.93) {
     // A matching TITLE is not enough — partially hallucinated references keep
     // a real title but carry the wrong year or invented authors. Cross-check

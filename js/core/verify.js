@@ -385,7 +385,8 @@ export async function verifyEntry(entry, client, prefetch) {
  */
 export async function verifyFreeform(refText, client, prefetch) {
   const checkedSources = [];
-  const text = refText.replace(/\s+/g, ' ').trim().slice(0, 500);
+  // generous cap: robotics/ML papers list 40+ authors before the title starts
+  const text = refText.replace(/\s+/g, ' ').trim().slice(0, 900);
   if (text.length < 15) return { status: 'unverifiable', matched: null, corrections: [], checkedSources, note: 'Reference string too short to match.' };
 
   const guessedTitle = guessTitle(text);
@@ -508,7 +509,8 @@ export function guessTitle(refRaw) {
     .map((s) => s.trim()).filter((s) => s.length > 0);
   const plausible = (p) => {
     const words = p.split(/\s+/).length;
-    return words >= 3 && words <= 40 && !isVenue(p);
+    // volume/page shapes ("Science, 378(6624):1092–1097") are venues, not titles
+    return words >= 3 && words <= 40 && !isVenue(p) && !/\d+\s*\(\d+\)|\d+[–—-]\d+|:\d{2,}/.test(p);
   };
   // parts[0] is usually authors (+year); title is usually the following segment
   for (let i = 1; i < Math.min(parts.length, 3); i++) {

@@ -281,3 +281,14 @@ test('Perelman-style compound labels ([B-Em], [C-Chu 1]) split across wrapped li
   assert.equal(items.length, 3, JSON.stringify(items.map((i) => i.text.slice(0, 25))));
   assert.ok(items[1].text.startsWith('[B-Em]'));
 });
+
+test('PDF line-break hyphenation is undone in extracted references', () => {
+  const text = `\nReferences\n[Gao et al., 2023] Luyu Gao, Aman Madaan, and Graham Neubig. PAL: Program-aided lan-\nguage models. In ICML, 2023.\n[Sumers et al., 2024] Theodore R. Sumers and Thomas L. Griffiths. Cogni-\ntive architectures for language agents. TMLR, 2024.\n[Liu et al., 2024] Xiao Liu, Yi-\nfan Xu, et al. AgentBench: Evaluat-\ning LLMs as agents. In ICLR, 2024.\n`;
+  const { items } = splitReferences(text);
+  assert.equal(items.length, 3);
+  assert.ok(items[0].text.includes('Program-aided language models'), items[0].text);
+  assert.ok(items[1].text.includes('Cognitive architectures'), items[1].text);
+  assert.ok(items[2].text.includes('Evaluating LLMs as agents'), items[2].text);
+  // genuine compounds keep their hyphen when not followed by a space
+  assert.ok(items[0].text.includes('Program-aided'));
+});

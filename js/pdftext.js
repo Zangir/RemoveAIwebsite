@@ -143,7 +143,14 @@ function splitOneSection(section) {
   return out.filter(Boolean);
 }
 
-const clean = (s) => s.replace(/\s+/g, ' ').trim();
+// Collapse whitespace and undo PDF line-break hyphenation ("lan- guage" →
+// "language"): a hyphen between two lowercase letters with a space after it
+// is virtually always a wrapped word, and split titles/authors break every
+// database search ("Cogni- tive architectures" finds nothing).
+const clean = (s) => s.replace(/\s+/g, ' ')
+  .replace(/([a-zà-öø-ÿ])- (?=[a-zà-öø-ÿ])/g, '$1')   // "lan- guage"  → "language"
+  .replace(/([A-Za-zà-öø-ÿ])- (?=[A-Z])/g, '$1-')      // "Alpha- Code" → "Alpha-Code" (compound stays)
+  .trim();
 
 /**
  * Bibliography entry vs. in-text citation fragment: an entry has an author

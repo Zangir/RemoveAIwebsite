@@ -104,6 +104,7 @@ function cleanBibitemText(t) {
     .replace(/[{}~]/g, ' ')
     .replace(/%.*$/gm, '')
     .replace(/\s+/g, ' ')
+    .replace(/([a-zà-öø-ÿ])- (?=[a-zà-öø-ÿ])/g, '$1') // undo line-break hyphenation
     .trim();
 }
 

@@ -188,3 +188,37 @@ test('lowercase-prefix labels ([d’Avila Garcez et al., 2012]) are recognized',
   assert.ok(items.some((i) => i.text.includes('Neural-Symbolic Cognitive Reasoning')), JSON.stringify(items.map((i) => i.text.slice(0, 50))));
   assert.equal(items.length, 3);
 });
+
+test('arXiv fast path falls back to DBLP when S2 is rate-limited', async () => {
+  const f = async (url) => {
+    if (url.includes('semanticscholar')) return { ok: false, status: 429, headers: { get: () => '0' }, json: async () => ({}) };
+    if (url.includes('dblp.org') && url.includes('2408.03314')) {
+      return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({
+        result: { hits: { hit: [{ info: {
+          title: 'Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters.',
+          authors: { author: [{ text: 'Charlie Snell' }, { text: 'Aviral Kumar' }] },
+          year: '2024', venue: 'CoRR', ee: 'https://arxiv.org/abs/2408.03314',
+        } }] } },
+      }) };
+    }
+    return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+  };
+  const r = await verifyFreeform(
+    '[Snell et al., 2024] Charlie Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. Scaling LLM test-time compute optimally is more effective than scaling model parameters for reasoning. arXiv preprint arXiv:2408.03314, 2024.',
+    fastClient(f));
+  assert.equal(r.status, 'verified', JSON.stringify(r));
+  assert.ok(r.note.includes('arXiv:2408.03314'));
+  assert.equal(r.matched.source, 'DBLP');
+});
+
+test('DBLP queries are capped to 8 significant words', async () => {
+  const urls = [];
+  const f = async (url) => { urls.push(url); return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) }; };
+  await verifyFreeform(
+    'A. Author and B. Buthor. Scaling LLM test time compute optimally is more effective than scaling model parameters for reasoning. In NeurIPS, 2024.',
+    fastClient(f));
+  const dblpUrl = urls.find((u) => u.includes('dblp.org'));
+  assert.ok(dblpUrl, 'DBLP was queried');
+  const q = decodeURIComponent(dblpUrl.match(/q=([^&]*)/)[1]);
+  assert.ok(q.split(' ').length <= 8, `query too long: ${q}`);
+});

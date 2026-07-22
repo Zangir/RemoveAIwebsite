@@ -253,6 +253,16 @@ async function verifyAll() {
   state.citationResults = [];
   $('cite-section').hidden = false;
 
+  const verifyOne = async (t) => {
+    try {
+      return t.kind === 'bib'
+        ? await verifyEntry({ ...t.entry, title: t.entry.title, type: t.entry.type }, client)
+        : await verifyFreeform(t.item.text, client);
+    } catch (e) {
+      return { status: 'error', corrections: [], checkedSources: [], note: e.message };
+    }
+  };
+
   for (let i = 0; i < targets.length; i++) {
     if (state.cancelled) {
       for (const t of targets.slice(i)) {
@@ -263,19 +273,28 @@ async function verifyAll() {
       break;
     }
     const t = targets[i];
-    setProgress(5 + (i / targets.length) * 95, `Verifying ${i + 1} / ${targets.length}: ${t.key} — ${t.title.slice(0, 60)}`);
-    let r;
-    try {
-      r = t.kind === 'bib'
-        ? await verifyEntry({ ...t.entry, title: t.entry.title, type: t.entry.type }, client)
-        : await verifyFreeform(t.item.text, client);
-    } catch (e) {
-      r = { status: 'error', corrections: [], checkedSources: [], note: e.message };
-    }
+    setProgress(5 + (i / targets.length) * 90, `Verifying ${i + 1} / ${targets.length}: ${t.key} — ${t.title.slice(0, 60)}`);
+    const r = await verifyOne(t);
     const res = { ...t, ...r, action: defaultAction(t, r) };
     state.citationResults.push(res);
     renderCitationRow(res);
     updateCiteSummary();
+  }
+
+  // Second pass: entries that came up empty may have been checked while a
+  // rate-limited source was benched — recheck them once the pool recovers.
+  const redo = state.citationResults.filter((r) => ['notfound', 'error'].includes(r.status));
+  if (redo.length && !state.cancelled) {
+    for (let i = 0; i < redo.length; i++) {
+      if (state.cancelled) break;
+      const res = redo[i];
+      setProgress(95 + (i / redo.length) * 5, `Second pass ${i + 1} / ${redo.length} (rechecking unmatched): ${res.key}`);
+      const r2 = await verifyOne(res);
+      if (r2.status !== res.status || (r2.checkedSources?.length || 0) > (res.checkedSources?.length || 0)) {
+        Object.assign(res, r2, { action: defaultAction(res, r2) });
+        if (res._tr) fillCitationRow(res._tr, res);
+      }
+    }
   }
   updateCiteSummary();
 }
@@ -342,6 +361,12 @@ function fixLabelUI(f) {
 function renderCitationRow(r) {
   const tb = $('cite-table').querySelector('tbody');
   const tr = document.createElement('tr');
+  r._tr = tr; // kept for in-place updates by the second verification pass
+  fillCitationRow(tr, r);
+  tb.appendChild(tr);
+}
+
+function fillCitationRow(tr, r) {
   const corr = (r.corrections || []).map((c) =>
     `<div>${esc(c.field)}: <s>${esc(short(String(c.current ?? '(missing)'), 60))}</s> → <b>${esc(short(c.correct, 60))}</b>${c.soft ? ' <small>(optional)</small>' : ''}</div>`).join('');
   const canRemove = r.kind === 'bib' || r.kind === 'bibitem';
@@ -394,7 +419,6 @@ function renderCitationRow(r) {
     });
     tr.classList.toggle('row-removed', r.action === 'remove');
   }
-  tb.appendChild(tr);
 }
 
 function updateCiteSummary() {

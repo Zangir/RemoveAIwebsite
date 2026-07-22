@@ -93,6 +93,13 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
 
 const S2_FIELDS = 'title,authors,year,externalIds,venue,publicationVenue';
 
+// DBLP's search AND-matches every word, so long titles (or titles that
+// drifted between the arXiv version and the published one) return nothing.
+// Eight significant words is specific enough and robust to drift.
+function dblpQuery(title) {
+  return normalizeTitle(title).split(' ').filter((w) => w.length > 1).slice(0, 8).join(' ');
+}
+
 function candFromS2(p) {
   if (!p || !p.title) return null;
   return {
@@ -232,7 +239,7 @@ export async function verifyEntry(entry, client) {
     for (const w of r?.results || []) { const c = candFromOpenAlex(w); if (c) candidates.push(c); }
   }
   if (entry.title && need()) {
-    const r = await tryStep('DBLP', () => client.call('dblp', `/search/publ/api?q=${encodeURIComponent(normalizeTitle(entry.title))}&format=json&h=3`));
+    const r = await tryStep('DBLP', () => client.call('dblp', `/search/publ/api?q=${encodeURIComponent(dblpQuery(entry.title))}&format=json&h=3`));
     for (const h of r?.result?.hits?.hit || []) { const c = candFromDblp(h); if (c) candidates.push(c); }
   }
 
@@ -343,22 +350,39 @@ export async function verifyFreeform(refText, client) {
   let bestScore = 0, best = null;
   const consider = (c) => { if (!c) return; const s = scoreCand(c); if (s > bestScore) { bestScore = s; best = c; } };
 
-  // ---- 0. arXiv id in the reference: resolve it directly ----
+  // ---- 0. arXiv id in the reference: resolve it directly (strongest evidence).
+  // S2 first; DBLP indexes every arXiv preprint as CoRR and finds the number
+  // too — vital both when S2 is rate-limited and when the paper's title
+  // drifted between the cited arXiv version and the published one.
   const axId = extractArxivId(text);
   if (axId) {
+    // corroborate: the resolved title or an author surname must appear in the ref text
+    const corroborated = (c) => {
+      const nt = normalizeTitle(c.title);
+      const titleHit = nt.split(' ').length >= 3 && normText.includes(nt);
+      const authorHit = candidateLastNames(c).some((n) => n.length > 3 && normText.includes(n));
+      return titleHit || authorHit;
+    };
     try {
       const p = await client.call('s2', `/graph/v1/paper/arXiv:${encodeURIComponent(axId)}?fields=${S2_FIELDS}`);
       checkedSources.push('Semantic Scholar (arXiv id)');
       const c = candFromS2(p);
       if (c) {
-        // corroborate: the resolved title or an author surname must appear in the ref text
-        const nt = normalizeTitle(c.title);
-        const titleHit = nt.split(' ').length >= 3 && normText.includes(nt);
-        const authorHit = candidateLastNames(c).some((n) => n.length > 3 && normText.includes(n));
-        if (titleHit || authorHit) {
+        if (corroborated(c)) {
           return { status: 'verified', matched: c, corrections: [], checkedSources, note: `arXiv:${axId} resolves to “${c.title}” (${c.source}).` };
         }
         consider(c);
+      }
+    } catch { /* try DBLP */ }
+    try {
+      const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(axId)}&format=json&h=3`);
+      checkedSources.push('DBLP (arXiv id)');
+      for (const h of r?.result?.hits?.hit || []) {
+        const c = candFromDblp(h);
+        if (c && corroborated(c)) {
+          return { status: 'verified', matched: c, corrections: [], checkedSources, note: `arXiv:${axId} resolves to “${c.title}” (${c.source}).` };
+        }
+        if (c) consider(c);
       }
     } catch { /* fall through */ }
   }
@@ -381,7 +405,7 @@ export async function verifyFreeform(refText, client) {
   }
   if (bestScore < 0.93 && q) {
     try {
-      const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(normalizeTitle(q))}&format=json&h=3`);
+      const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(dblpQuery(q))}&format=json&h=3`);
       checkedSources.push('DBLP');
       for (const h of r?.result?.hits?.hit || []) consider(candFromDblp(h));
     } catch { /* continue */ }

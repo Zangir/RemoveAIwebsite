@@ -45,6 +45,10 @@ body {
 h1 { margin: 0; font-size: clamp(1.8rem, 4.5vw, 2.7rem); line-height: 1.15; letter-spacing: -.015em; }
 .tagline { margin: 14px 0 0; color: var(--muted); font-size: 1.08rem; max-width: 66ch; }
 .tagline b { color: var(--ink); }
+.tagline-why {
+  font-size: .95rem; max-width: 78ch; margin-top: 12px;
+  border-left: 3px solid var(--accent); padding-left: 12px;
+}
 .hero-badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
 .hb {
   font-size: .82rem; font-weight: 600; color: var(--muted);

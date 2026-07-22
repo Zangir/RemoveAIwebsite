@@ -78,8 +78,8 @@ function splitOneSection(section) {
   const out = [];
   let cur = '';
   const numbered = /^\s*(?:\[\d{1,3}\]|\d{1,3}\.)\s+/;
-  // "[Achiam et al., 2023]" / "[Hoffmann and Nebel, 2001]" / "[Silver, 2024a]"
-  const labelRe = /\[[A-Z][^\[\]]{0,60}?(?:19|20)\d{2}[a-z]?\]/g;
+  // "[Achiam et al., 2023]" / "[d'Avila Garcez et al., 2012]" / "[Silver, 2024a]"
+  const labelRe = /\[[A-Za-z][^\[\]]{0,60}?(?:19|20)\d{2}[a-z]?\]/g;
 
   const labelCount = (section.match(labelRe) || []).length;
   const numberedCount = lines.filter((l) => numbered.test(l)).length;
@@ -96,7 +96,9 @@ function splitOneSection(section) {
     if (cur.trim()) out.push(clean(cur));
   } else if (labelCount >= 3) {
     // label-anchored: split at every [Label, Year] marker regardless of line
-    // position (PDF extraction reflows lines arbitrarily)
+    // position (PDF extraction reflows lines arbitrarily). Running text also
+    // cites with [Label, Year] (related-work prose, appendix tables), so each
+    // candidate must additionally LOOK like a bibliography entry.
     const flat = section.replace(/\s+/g, ' ');
     const idxs = [];
     let m;
@@ -104,7 +106,8 @@ function splitOneSection(section) {
     while ((m = re.exec(flat))) idxs.push(m.index);
     for (let i = 0; i < idxs.length; i++) {
       const end = i + 1 < idxs.length ? idxs[i + 1] : flat.length;
-      out.push(clean(flat.slice(idxs[i], end)));
+      const item = clean(flat.slice(idxs[i], end));
+      if (isLabelStyleEntry(item)) out.push(item);
     }
   } else {
     // hanging indent / blank-line separated
@@ -121,6 +124,20 @@ function splitOneSection(section) {
 }
 
 const clean = (s) => s.replace(/\s+/g, ' ').trim();
+
+/**
+ * Bibliography entry vs. in-text citation fragment: an entry has an author
+ * list right after the label (starts with a capital) and ends in a year,
+ * arXiv id, DOI, page range or URL. Prose fragments start ", with ...",
+ * "and ...", lowercase verbs — and end mid-sentence where the next label
+ * happens to begin.
+ */
+export function isLabelStyleEntry(item) {
+  const after = item.replace(/^\[[^\[\]]*\]\s*/, '');
+  if (!/^[A-Z]/.test(after)) return false;
+  const tail = item.slice(-50);
+  return /(?:(?:19|20)\d{2}[a-z]?|\d{4}\.\d{4,5}(?:v\d+)?|10\.\d{4,9}\/[^\s,;]+|pages?\s+[\d–—-]+|https?:\/\/\S+)[.,)\]]?\s*$/.test(tail);
+}
 
 /** Filter out table rows, figure captions and other appendix debris. */
 export function looksLikeReference(text) {

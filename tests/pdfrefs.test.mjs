@@ -169,3 +169,22 @@ test('guessTitle: real titles starting with "In" survive the venue filter', () =
   const g = guessTitle('A. Hermans, L. Beyer, and B. Leibe. In defense of the triplet loss for person re-identification. arXiv preprint arXiv:1703.07737, 2017.');
   assert.ok(g && g.toLowerCase().startsWith('in defense of the triplet loss'), `got: ${g}`);
 });
+
+test('related-work prose with inline [Label] citations is not mistaken for references', () => {
+  const text = `\nReferences\n[Achiam et al., 2023] Josh Achiam, Steven Adler, et al. GPT-4 technical report. arXiv preprint arXiv:2303.08774, 2023.\n[Wei et al., 2022] Jason Wei, Xuezhi Wang, and Denny Zhou. Chain-of-thought prompting elicits reasoning in large language models. In NeurIPS, 2022.\n[Kojima et al., 2022] Takeshi Kojima and Yusuke Iwasawa. Large language models are zero-shot reasoners. In NeurIPS, 2022.\n\nA Related Work\nThe most popular approach is chain-of-thought prompting [Wei et al., 2022], with extensions ranging from zero-shot variants [Kojima et al., 2022] and Least-to-Most decomposition [Zhou et al., 2023] to tree-structured search [Yao et al., 2023a; Besta et al., 2024]. These methods share one limitation. PAL [Gao et al., 2023] and Program-of-Thought [Chen et al., 2023] address arithmetic by offloading computation.\n`;
+  const { items } = splitReferences(text);
+  const texts = items.map((i) => i.text);
+  assert.ok(texts.some((t) => t.includes('GPT-4 technical report')));
+  assert.ok(texts.some((t) => t.includes('Chain-of-thought prompting elicits')));
+  for (const t of texts) {
+    assert.ok(!/with extensions ranging|Least-to-Most decomposition|address arithmetic|These methods/.test(t),
+      `prose leaked as reference: ${t.slice(0, 80)}`);
+  }
+});
+
+test('lowercase-prefix labels ([d’Avila Garcez et al., 2012]) are recognized', () => {
+  const text = `\nReferences\n[Cobbe et al., 2021] Karl Cobbe, Vineet Kosaraju, et al. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168, 2021.\n[d’Avila Garcez et al., 2012] Artur S. d’Avila Garcez, Luís C. Lamb, and Dov M. Gabbay. Neural-Symbolic Cognitive Reasoning. Springer, 2012.\n[Erol et al., 1996] Kutluhan Erol, James Hendler, and Dana S. Nau. Complexity results for hierarchical task-network planning. Annals of Mathematics and AI, 18:69-93, 1996.\n`;
+  const { items } = splitReferences(text);
+  assert.ok(items.some((i) => i.text.includes('Neural-Symbolic Cognitive Reasoning')), JSON.stringify(items.map((i) => i.text.slice(0, 50))));
+  assert.equal(items.length, 3);
+});

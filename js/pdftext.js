@@ -48,27 +48,30 @@ export function splitReferences(fullText) {
   while ((hm = headingRe.exec(fullText))) sections.push(hm.index + hm[0].length);
   if (!sections.length) return { items: [], headingFound: false };
 
-  const raw = [];
+  const collected = [];
   for (const start of sections) {
     let section = fullText.slice(start);
     const stop = /\n\s*(?:(?:appendix|appendices|supplementary material|acknowledg(?:e)?ments?)\b[^\n]{0,80}|[0-9IVX.\s]{0,6}(?:full )?bibliography\s*)\n/i.exec(section);
     if (stop) section = section.slice(0, stop.index);
-    raw.push(...splitOneSection(section));
+    collected.push(...splitOneSection(section));
   }
 
   // dedupe (main References vs appendix Full Bibliography list the same works)
   const seen = new Set();
   const items = [];
-  for (const text of raw) {
-    if (!looksLikeReference(text)) continue;
-    const key = text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 70);
+  for (const pair of collected) {
+    if (!looksLikeReference(pair.text)) continue;
+    const key = pair.text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 70);
     if (seen.has(key)) continue;
     seen.add(key);
-    items.push(text);
+    items.push(pair);
   }
 
   return {
-    items: items.map((text, i) => ({ index: i + 1, text })),
+    // raw keeps the original hyphenation ("open- ended"): dehyphenation can't
+    // tell split words from wrapped compounds, so verification can fall back
+    // to a raw-derived query when the cleaned one finds nothing.
+    items: items.map((pair, i) => ({ index: i + 1, text: pair.text, raw: pair.raw })),
     headingFound: true,
   };
 }
@@ -102,18 +105,18 @@ function splitOneSection(section) {
     while ((am = alphaAny.exec(flat))) idxs.push(am.index);
     for (let i = 0; i < idxs.length; i++) {
       const end = i + 1 < idxs.length ? idxs[i + 1] : flat.length;
-      out.push(clean(flat.slice(idxs[i], end)));
+      out.push(pair(flat.slice(idxs[i], end)));
     }
   } else if (numberedCount >= 3 && numberedCount >= labelCount / 2) {
     for (const line of lines) {
       if (numbered.test(line)) {
-        if (cur.trim()) out.push(clean(cur));
+        if (cur.trim()) out.push(pair(cur));
         cur = line.replace(numbered, '');
       } else if (cur) {
         cur += ' ' + line.trim();
       }
     }
-    if (cur.trim()) out.push(clean(cur));
+    if (cur.trim()) out.push(pair(cur));
   } else if (labelCount >= 3) {
     // label-anchored: split at every [Label, Year] marker regardless of line
     // position (PDF extraction reflows lines arbitrarily). Running text also
@@ -126,19 +129,19 @@ function splitOneSection(section) {
     while ((m = re.exec(flat))) idxs.push(m.index);
     for (let i = 0; i < idxs.length; i++) {
       const end = i + 1 < idxs.length ? idxs[i + 1] : flat.length;
-      const item = clean(flat.slice(idxs[i], end));
-      if (isLabelStyleEntry(item)) out.push(item);
+      const item = pair(flat.slice(idxs[i], end));
+      if (isLabelStyleEntry(item.text)) out.push(item);
     }
   } else {
     // hanging indent / blank-line separated
     const starter = /^[A-Z][\p{L}'’-]+,?\s+(?:[A-Z]\.|[A-Z][\p{L}'’-]+)/u;
     for (const line of lines) {
       const t = line.trim();
-      if (!t) { if (cur.trim()) { out.push(clean(cur)); cur = ''; } continue; }
-      if (starter.test(t) && cur.length > 60) { out.push(clean(cur)); cur = t; }
+      if (!t) { if (cur.trim()) { out.push(pair(cur)); cur = ''; } continue; }
+      if (starter.test(t) && cur.length > 60) { out.push(pair(cur)); cur = t; }
       else cur += (cur ? ' ' : '') + t;
     }
-    if (cur.trim()) out.push(clean(cur));
+    if (cur.trim()) out.push(pair(cur));
   }
   return out.filter(Boolean);
 }
@@ -147,6 +150,8 @@ function splitOneSection(section) {
 // "language"): a hyphen between two lowercase letters with a space after it
 // is virtually always a wrapped word, and split titles/authors break every
 // database search ("Cogni- tive architectures" finds nothing).
+const pair = (s) => ({ text: clean(s), raw: s.replace(/\s+/g, ' ').trim() });
+
 const clean = (s) => s.replace(/\s+/g, ' ')
   .replace(/([a-zà-öø-ÿ])- (?=[a-zà-öø-ÿ])/g, '$1')   // "lan- guage"  → "language"
   .replace(/([A-Za-zà-öø-ÿ])- (?=[A-Z])/g, '$1-')      // "Alpha- Code" → "Alpha-Code" (compound stays)

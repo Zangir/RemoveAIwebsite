@@ -383,7 +383,7 @@ export async function verifyEntry(entry, client, prefetch) {
  * PDF reference can carry) → CrossRef bibliographic matcher → S2 / DBLP /
  * OpenAlex title search on a guessed title.
  */
-export async function verifyFreeform(refText, client, prefetch) {
+export async function verifyFreeform(refText, client, prefetch, rawText) {
   const checkedSources = [];
   // generous cap: robotics/ML papers list 40+ authors before the title starts
   const text = refText.replace(/\s+/g, ' ').trim().slice(0, 900);
@@ -480,6 +480,28 @@ export async function verifyFreeform(refText, client, prefetch) {
       checkedSources.push('OpenAlex');
       for (const w of r?.results || []) consider(candFromOpenAlex(w));
     } catch { /* continue */ }
+  }
+
+  // Dehyphenation is ambiguous: "open- ended" was a wrapped COMPOUND, and the
+  // cleaned "openended" breaks word matching. If the cleaned query found
+  // nothing, retry with the title guessed from the raw (pre-clean) text,
+  // whose "open- ended" normalizes to the correct "open ended" tokens.
+  if (bestScore < 0.93 && rawText) {
+    const g2 = guessTitle(rawText.replace(/\s+/g, ' ').trim().slice(0, 900));
+    if (g2 && normalizeTitle(g2) !== normalizeTitle(guessedTitle || '')) {
+      try {
+        const r = await client.call('s2', `/graph/v1/paper/search/match?query=${encodeURIComponent(g2)}&fields=${S2_FIELDS}`);
+        checkedSources.push('Semantic Scholar (raw)');
+        consider(candFromS2(r?.data?.[0]));
+      } catch { /* continue */ }
+      if (bestScore < 0.93) {
+        try {
+          const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(dblpQuery(g2))}&format=json&h=3`);
+          checkedSources.push('DBLP (raw)');
+          for (const h of r?.result?.hits?.hit || []) consider(candFromDblp(h));
+        } catch { /* continue */ }
+      }
+    }
   }
 
   if (!checkedSources.length) return { status: 'error', matched: null, corrections: [], checkedSources, note: 'All lookups failed.' };

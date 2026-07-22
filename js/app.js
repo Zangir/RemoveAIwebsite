@@ -262,7 +262,7 @@ async function verifyAll() {
     try {
       return t.kind === 'bib'
         ? await verifyEntry({ ...t.entry, title: t.entry.title, type: t.entry.type }, client, prefetch)
-        : await verifyFreeform(t.item.text, client, prefetch);
+        : await verifyFreeform(t.item.text, client, prefetch, t.item.raw);
     } catch (e) {
       return { status: 'error', corrections: [], checkedSources: [], note: e.message };
     }

@@ -37,15 +37,20 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
   const f = fetchImpl || ((...a) => globalThis.fetch(...a));
   const zzz = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   const lastCall = {};
-  // Adaptive throttling: long documents mean hundreds of sequential calls, and
-  // shared-pool hosts (Semantic Scholar especially) start 429ing under
-  // sustained load. Every 429 stretches that host's gap for the rest of the
-  // session; successes slowly relax it back.
+  // Adaptive throttling + circuit breaker: long documents mean hundreds of
+  // sequential calls, and shared-pool hosts (Semantic Scholar especially)
+  // start 429ing under sustained load. Every 429 stretches that host's gap;
+  // after two calls in a row die rate-limited, the host is benched for 45 s
+  // (the other three sources carry the load) instead of stalling every
+  // remaining reference on max backoff.
   const gapScale = {};
+  const consecRatelimits = {};
+  const benchedUntil = {};
   const now = () => (globalThis.performance ? performance.now() : new Date().getTime());
 
   async function call(host, path) {
     const cfg = HOSTS[host];
+    if ((benchedUntil[host] || 0) > now()) throw new Error(`cooldown:${host}`);
     let url = cfg.base + path;
     if (mailto && (host === 'crossref' || host === 'openalex')) {
       url += (url.includes('?') ? '&' : '?') + 'mailto=' + encodeURIComponent(mailto);
@@ -65,12 +70,18 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
       }
       if (res.status === 429 || res.status === 503) {
         gapScale[host] = Math.min(4, (gapScale[host] || 1) * 1.5);
-        const ra = Math.min((parseInt(res.headers?.get?.('Retry-After')) || 2 + attempt * 2) * 1000, 12000);
+        const ra = Math.min((parseInt(res.headers?.get?.('Retry-After')) || 2 + attempt * 2) * 1000, 8000);
         if (attempt < ATTEMPTS - 1) { await zzz(ra); continue; }
+        consecRatelimits[host] = (consecRatelimits[host] || 0) + 1;
+        if (consecRatelimits[host] >= 2) {
+          benchedUntil[host] = now() + 45000;
+          consecRatelimits[host] = 0;
+        }
         throw new Error(`ratelimit:${host}`);
       }
-      if (res.status === 404) return null;
+      if (res.status === 404) { consecRatelimits[host] = 0; return null; }
       if (!res.ok) throw new Error(`http${res.status}:${host}`);
+      consecRatelimits[host] = 0;
       gapScale[host] = Math.max(1, (gapScale[host] || 1) * 0.97);
       return res.json();
     }

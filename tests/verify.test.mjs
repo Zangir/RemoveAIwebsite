@@ -249,3 +249,25 @@ test('generic-title book matching a different work stays unverifiable, not suspe
   }, fastClient(f));
   assert.equal(article.status, 'suspect');
 });
+
+test('circuit breaker: a persistently rate-limited host is benched, others still work', async () => {
+  let s2Attempts = 0;
+  const f = mockFetch([
+    ['semanticscholar', () => { s2Attempts++; return { status: 429, headers: {} }; }],
+    ['dblp.org', { result: { hits: { hit: [{ info: {
+      title: 'Attention is All you Need.', year: '2017', venue: 'NIPS',
+      authors: { author: [{ text: 'Ashish Vaswani' }] },
+    } }] } } }],
+    ['crossref', { message: { items: [] } }],
+    ['openalex', { results: [] }],
+  ]);
+  const client = fastClient(f);
+  const entry = (k) => ({ type: 'inproceedings', key: k, title: 'Attention is all you need', author: 'Vaswani, Ashish', year: '2017', doi: null, arxivId: null });
+  const r1 = await verifyEntry(entry('a'), client); // S2 dies (3 attempts), rest work
+  const r2 = await verifyEntry(entry('b'), client); // S2 dies again → benched
+  const after = s2Attempts;
+  const r3 = await verifyEntry(entry('c'), client); // S2 benched: no new attempts
+  assert.equal(r1.status, 'verified');
+  assert.equal(r3.status, 'verified');
+  assert.equal(s2Attempts, after, 'benched host must not be called');
+});

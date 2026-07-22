@@ -16,7 +16,7 @@ text â€” chat artifacts like *"Certainly! Here is your revised introduction"* â€
 by a single leftover *"I hope this helps!"* in a PDF.
 
 **verifAI checks your paper before anyone else sees it, and fixes what it finds.**
-Built at [MBZUAI](https://mbzuai.ac.ae/) by [Zangir Iklassov](https://www.linkedin.com/in/zangir-iklassov-81b516b5/) and Kyriakos Tsourekas.
+Built by [Prof. Zangir Iklassov](https://www.linkedin.com/in/zangir-iklassov-81b516b5/) and Kyriakos Tsourekas (student).
 
 ![verifAI report: flagged chat artifacts and a fabricated citation with proposed fixes](assets/screenshot.png)
 

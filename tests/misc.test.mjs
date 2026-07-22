@@ -65,10 +65,10 @@ test('report markdown renders tables and caveats', () => {
 });
 
 test('splitReferences: numbered [n] style', () => {
-  const text = `Body text.\n\nReferences\n[1] A. Author. First paper. NeurIPS, 2020.\n[2] B. Buthor. Second paper\nwith a wrapped line. ICML, 2021.\n\nAppendix\nMore stuff`;
+  const text = `Body text.\n\nReferences\n[1] A. Author. First paper. NeurIPS, 2020.\n[2] B. Buthor. Second paper\nwith a wrapped line. ICML, 2021.\n[3] C. Cuthor. Third paper title here. ACL, 2022.\n\nAppendix\nMore stuff`;
   const { items, headingFound } = splitReferences(text);
   assert.ok(headingFound);
-  assert.equal(items.length, 2);
+  assert.equal(items.length, 3);
   assert.ok(items[1].text.includes('wrapped line'));
 });
 

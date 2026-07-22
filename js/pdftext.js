@@ -51,7 +51,7 @@ export function splitReferences(fullText) {
   const raw = [];
   for (const start of sections) {
     let section = fullText.slice(start);
-    const stop = /\n\s*(appendix|appendices|supplementary material|acknowledg(?:e)?ments?|[0-9IVX.\s]{0,6}(?:full )?bibliography)\s*\n/i.exec(section);
+    const stop = /\n\s*(?:(?:appendix|appendices|supplementary material|acknowledg(?:e)?ments?)\b[^\n]{0,80}|[0-9IVX.\s]{0,6}(?:full )?bibliography\s*)\n/i.exec(section);
     if (stop) section = section.slice(0, stop.index);
     raw.push(...splitOneSection(section));
   }
@@ -78,27 +78,33 @@ function splitOneSection(section) {
   const out = [];
   let cur = '';
   const numbered = /^\s*(?:\[\d{1,3}\]|\d{1,3}\.)\s+/;
-  // math/amsalpha style: "[Gro87]", "[CLRS09]", "[GKP+89]" — and digit-less
-  // name labels ("[Lott]", "[A]") used e.g. in Perelman's papers
-  const alpha = /^\s*\[[A-Za-z]{1,8}[+'’]?\d{0,2}[a-z]?\]\s+/;
+  // math/amsalpha style: "[Gro87]", "[CLRS09]", "[GKP+89]" — plus digit-less
+  // and compound name labels ("[Lott]", "[B-Em]", "[C-Chu 1]") as in
+  // Perelman-style bibliographies
+  const alpha = /^\s*\[[A-Za-z][A-Za-z'’+.-]{0,10}(?:\s?\d{1,2})?[a-z]?\]\s+/;
   // "[Achiam et al., 2023]" / "[d'Avila Garcez et al., 2012]" / "[Silver, 2024a]"
   const labelRe = /\[[A-Za-z][^\[\]]{0,60}?(?:19|20)\d{2}[a-z]?\]/g;
 
   const labelCount = (section.match(labelRe) || []).length;
   const numberedCount = lines.filter((l) => numbered.test(l)).length;
-  const alphaCount = lines.filter((l) => alpha.test(l)).length;
+  // a real bibliography label has a year nearby; "[CLS] the man went to
+  // [MASK] store" appendix examples do not — this keeps token/markup brackets
+  // from hijacking the branch when an appendix leaks into the section
+  const alphaCount = lines.filter((l, i) =>
+    alpha.test(l) && /(?:19|20)\d{2}/.test(l + ' ' + (lines[i + 1] || '') + ' ' + (lines[i + 2] || ''))).length;
 
   if (alphaCount >= 2 && alphaCount > numberedCount) {
-    for (const line of lines) {
-      if (alpha.test(line)) {
-        if (cur.trim()) out.push(clean(cur));
-        cur = line;
-      } else if (cur) {
-        cur += ' ' + line.trim();
-      }
+    // label-anchored across wrapped lines (labels are not always at line start)
+    const flat = section.replace(/\s+/g, ' ');
+    const alphaAny = /\[[A-Za-z][A-Za-z'’+.-]{0,10}(?:\s?\d{1,2})?[a-z]?\]\s*(?=[A-Z])/g;
+    const idxs = [];
+    let am;
+    while ((am = alphaAny.exec(flat))) idxs.push(am.index);
+    for (let i = 0; i < idxs.length; i++) {
+      const end = i + 1 < idxs.length ? idxs[i + 1] : flat.length;
+      out.push(clean(flat.slice(idxs[i], end)));
     }
-    if (cur.trim()) out.push(clean(cur));
-  } else if (numberedCount >= 2 && numberedCount >= labelCount / 2) {
+  } else if (numberedCount >= 3 && numberedCount >= labelCount / 2) {
     for (const line of lines) {
       if (numbered.test(line)) {
         if (cur.trim()) out.push(clean(cur));

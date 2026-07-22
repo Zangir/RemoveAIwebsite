@@ -267,3 +267,17 @@ test('batch prefetch short-circuits arXiv-id verification with zero extra calls'
   assert.equal(r.status, 'verified');
   assert.equal(calls, callsAfterBatch, 'no network calls needed after batch prefetch');
 });
+
+test('appendix token examples ([CLS], [MASK]) never hijack reference splitting (BERT)', () => {
+  const text = `\nReferences\nAlan Akbik, Duncan Blythe, and Roland Vollgraf.\n2018. Contextual string embeddings for sequence labeling. In COLING, pages 1638-1649.\nRie Ando and Tong Zhang. 2005. A framework\nfor learning predictive structures. JMLR, 6:1817-1853.\nYukun Zhu, Ryan Kiros, and Sanja Fidler. 2015. Aligning books and movies. In ICCV, pages 19-27.\nAppendix for "BERT: Pre-training of Deep Bidirectional Transformers"\nInput = [CLS] the man went to [MASK] store [SEP]\n[CLS] is a special symbol and [SEP] separates sentences.\nWNLI Winograd NLI is a small natural language inference dataset (Levesque et al., 2011).\n`;
+  const { items } = splitReferences(text);
+  assert.equal(items.length, 3, JSON.stringify(items.map((i) => i.text.slice(0, 30))));
+  assert.ok(!items.some((i) => /\[CLS\]|WNLI/.test(i.text)), 'appendix leaked');
+});
+
+test('Perelman-style compound labels ([B-Em], [C-Chu 1]) split across wrapped lines', () => {
+  const text = `\nReferences\n[A] M.T.Anderson Scalar curvature and geometrization conjecture for\nthree-manifolds. MSRI Publ. 30 (1997), 49-82.\n[B-Em] D.Bakry, M.Emery Diffusions hypercontractives. Lecture Notes in Math. 1123 (1985), 177-206.\n[C-Chu 1] B.Chow, S.-C. Chu A geometric interpretation of Hamilton's Harnack inequality. Math. Res. Lett. 2 (1995), 701-718.\n`;
+  const { items } = splitReferences(text);
+  assert.equal(items.length, 3, JSON.stringify(items.map((i) => i.text.slice(0, 25))));
+  assert.ok(items[1].text.startsWith('[B-Em]'));
+});

@@ -230,3 +230,40 @@ test('math alpha-label style ([Gro87], [CLRS09]) splits correctly', () => {
   assert.ok(items[0].text.startsWith('[BGS75]'));
   assert.ok(items[2].text.includes('Hyperbolic groups'));
 });
+
+test('physics-style refs: journal abbreviations do not break title guessing', () => {
+  const g = guessTitle('P. W. Higgs, Broken symmetries and the masses of gauge bosons, Phys. Rev. Lett. 13 (1964) 508-509.');
+  assert.ok(g && g.toLowerCase().includes('broken symmetries'), `got: ${g}`);
+  const g2 = guessTitle("G. 't Hooft and M. Veltman, Regularization and Renormalization of Gauge Fields, Nucl. Phys. B 44 (1972) 189-213.");
+  assert.ok(g2 && g2.includes('Regularization'), `got: ${g2}`);
+});
+
+test('digit-less name labels ([Lott], [A]) split correctly (Perelman style)', () => {
+  const text = `\nReferences\n[A] M. T. Anderson, Scalar curvature and geometrization conjecture for three-manifolds. Comparison Geometry, MSRI Publ. 30 (1997), 49-82.\n[H] R. Hamilton, The formation of singularities in the Ricci flow. Surveys in Differential Geometry, Vol. II (1995), 7-136.\n[Lott] J. Lott, Some geometric properties of the Bakry-Emery-Ricci tensor. Comment. Math. Helv. 78 (2003), 865-883.\n`;
+  const { items } = splitReferences(text);
+  assert.equal(items.length, 3, JSON.stringify(items.map((i) => i.text.slice(0, 30))));
+  assert.ok(items[2].text.startsWith('[Lott]'));
+});
+
+test('batch prefetch short-circuits arXiv-id verification with zero extra calls', async () => {
+  const { batchResolveIds } = await import('../js/core/verify.js');
+  let calls = 0;
+  const f = async (url, opts) => {
+    calls++;
+    if (url.includes('paper/batch')) {
+      return { ok: true, status: 200, headers: { get: () => null }, json: async () => ([{
+        title: 'GPT-4 Technical Report', authors: [{ name: 'Josh Achiam' }], year: 2023,
+        externalIds: { ArXiv: '2303.08774' },
+      }]) };
+    }
+    return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+  };
+  const client = fastClient(f);
+  const targets = [{ kind: 'pdfref', item: { text: '[Achiam et al., 2023] Josh Achiam et al. GPT-4 technical report. arXiv preprint arXiv:2303.08774, 2023.' } }];
+  const prefetch = await batchResolveIds(targets, client);
+  assert.equal(prefetch.size, 1);
+  const callsAfterBatch = calls;
+  const r = await verifyFreeform(targets[0].item.text, client, prefetch);
+  assert.equal(r.status, 'verified');
+  assert.equal(calls, callsAfterBatch, 'no network calls needed after batch prefetch');
+});

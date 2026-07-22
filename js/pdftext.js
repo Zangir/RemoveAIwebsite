@@ -78,8 +78,9 @@ function splitOneSection(section) {
   const out = [];
   let cur = '';
   const numbered = /^\s*(?:\[\d{1,3}\]|\d{1,3}\.)\s+/;
-  // math/amsalpha style: "[Gro87]", "[CLRS09]", "[GKP+89]", "[Tao10a]"
-  const alpha = /^\s*\[[A-Za-z]{1,8}[+'’]?\d{2}[a-z]?\]\s+/;
+  // math/amsalpha style: "[Gro87]", "[CLRS09]", "[GKP+89]" — and digit-less
+  // name labels ("[Lott]", "[A]") used e.g. in Perelman's papers
+  const alpha = /^\s*\[[A-Za-z]{1,8}[+'’]?\d{0,2}[a-z]?\]\s+/;
   // "[Achiam et al., 2023]" / "[d'Avila Garcez et al., 2012]" / "[Silver, 2024a]"
   const labelRe = /\[[A-Za-z][^\[\]]{0,60}?(?:19|20)\d{2}[a-z]?\]/g;
 

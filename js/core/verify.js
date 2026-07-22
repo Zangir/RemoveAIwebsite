@@ -51,14 +51,14 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
   // Per-host serialization: concurrent references may verify in parallel, but
   // calls to the SAME host are chained so its rate-limit gap stays honest.
   const hostChain = {};
-  function call(host, path) {
-    const run = () => doCall(host, path);
+  function call(host, path, opts) {
+    const run = () => doCall(host, path, opts);
     const p = (hostChain[host] || Promise.resolve()).then(run, run);
     hostChain[host] = p.catch(() => {});
     return p;
   }
 
-  async function doCall(host, path) {
+  async function doCall(host, path, opts = {}) {
     const cfg = HOSTS[host];
     if ((benchedUntil[host] || 0) > now()) throw new Error(`cooldown:${host}`);
     let url = cfg.base + path;
@@ -73,7 +73,11 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
       lastCall[host] = now();
       let res;
       try {
-        res = await f(url, { headers: { Accept: 'application/json' } });
+        res = await f(url, {
+          method: opts.method || 'GET',
+          headers: { Accept: 'application/json', ...(opts.body ? { 'Content-Type': 'application/json' } : {}) },
+          ...(opts.body ? { body: JSON.stringify(opts.body) } : {}),
+        });
       } catch (e) {
         if (attempt < ATTEMPTS - 1) { await zzz(1500 * (attempt + 1)); continue; }
         throw new Error(`network:${host}`);
@@ -102,6 +106,38 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
 }
 
 const S2_FIELDS = 'title,authors,year,externalIds,venue,publicationVenue';
+
+/**
+ * Batch prefetch: ONE Semantic Scholar POST resolves up to 500 arXiv ids /
+ * DOIs at once — the single biggest speed lever for reference lists, where
+ * most modern entries carry an id. Returns Map('arxiv:<id>'|'doi:<doi>' → candidate).
+ */
+export async function batchResolveIds(targets, client) {
+  const ids = new Set();
+  for (const t of targets) {
+    if (t.entry?.arxivId) ids.add(`ARXIV:${t.entry.arxivId}`);
+    if (t.entry?.doi) ids.add(`DOI:${t.entry.doi}`);
+    if (t.item?.text) {
+      const ax = extractArxivId(t.item.text);
+      if (ax) ids.add(`ARXIV:${ax}`);
+    }
+  }
+  const map = new Map();
+  const all = [...ids];
+  for (let i = 0; i < all.length; i += 100) {
+    const chunk = all.slice(i, i + 100);
+    try {
+      const res = await client.call('s2', `/graph/v1/paper/batch?fields=${S2_FIELDS}`, { method: 'POST', body: { ids: chunk } });
+      (res || []).forEach((p, j) => {
+        const c = candFromS2(p);
+        if (!c) return;
+        const key = chunk[j];
+        map.set(key.startsWith('ARXIV:') ? `arxiv:${key.slice(6)}` : `doi:${key.slice(4).toLowerCase()}`, c);
+      });
+    } catch { /* prefetch is best-effort; per-reference lookups still run */ }
+  }
+  return map;
+}
 
 // DBLP's search AND-matches every word, so long titles (or titles that
 // drifted between the arXiv version and the published one) return nothing.
@@ -191,13 +227,20 @@ export function scoreCandidate(entry, cand) {
  * @param client from makeClient()
  * @returns {status, matched, corrections, checkedSources, note}
  */
-export async function verifyEntry(entry, client) {
+export async function verifyEntry(entry, client, prefetch) {
   const checkedSources = [];
   const errors = [];
   const candidates = [];
 
   if ((!entry.title || entry.title.trim().length < 4) && !entry.doi && !entry.arxivId) {
     return { status: 'unverifiable', matched: null, corrections: [], checkedSources, note: 'Entry has no usable title, DOI or arXiv id to search for.' };
+  }
+
+  // batch-prefetched id resolutions: zero extra network
+  if (prefetch) {
+    const hit = (entry.arxivId && prefetch.get(`arxiv:${entry.arxivId}`)) ||
+      (entry.doi && prefetch.get(`doi:${entry.doi.toLowerCase()}`));
+    if (hit) { candidates.push(hit); checkedSources.push('Semantic Scholar (batch id)'); }
   }
 
   const tryStep = async (label, fn) => {
@@ -340,7 +383,7 @@ export async function verifyEntry(entry, client) {
  * PDF reference can carry) → CrossRef bibliographic matcher → S2 / DBLP /
  * OpenAlex title search on a guessed title.
  */
-export async function verifyFreeform(refText, client) {
+export async function verifyFreeform(refText, client, prefetch) {
   const checkedSources = [];
   const text = refText.replace(/\s+/g, ' ').trim().slice(0, 500);
   if (text.length < 15) return { status: 'unverifiable', matched: null, corrections: [], checkedSources, note: 'Reference string too short to match.' };
@@ -373,17 +416,27 @@ export async function verifyFreeform(refText, client) {
       const authorHit = candidateLastNames(c).some((n) => n.length > 3 && normText.includes(n));
       return titleHit || authorHit;
     };
-    try {
-      const p = await client.call('s2', `/graph/v1/paper/arXiv:${encodeURIComponent(axId)}?fields=${S2_FIELDS}`);
-      checkedSources.push('Semantic Scholar (arXiv id)');
-      const c = candFromS2(p);
-      if (c) {
-        if (corroborated(c)) {
-          return { status: 'verified', matched: c, corrections: [], checkedSources, note: `arXiv:${axId} resolves to “${c.title}” (${c.source}).` };
-        }
-        consider(c);
+    const pre = prefetch?.get(`arxiv:${axId}`);
+    if (pre) {
+      checkedSources.push('Semantic Scholar (batch id)');
+      if (corroborated(pre)) {
+        return { status: 'verified', matched: pre, corrections: [], checkedSources, note: `arXiv:${axId} resolves to “${pre.title}” (${pre.source}).` };
       }
-    } catch { /* try DBLP */ }
+      consider(pre);
+    }
+    if (!pre) {
+      try {
+        const p = await client.call('s2', `/graph/v1/paper/arXiv:${encodeURIComponent(axId)}?fields=${S2_FIELDS}`);
+        checkedSources.push('Semantic Scholar (arXiv id)');
+        const c = candFromS2(p);
+        if (c) {
+          if (corroborated(c)) {
+            return { status: 'verified', matched: c, corrections: [], checkedSources, note: `arXiv:${axId} resolves to “${c.title}” (${c.source}).` };
+          }
+          consider(c);
+        }
+      } catch { /* try DBLP */ }
+    }
     try {
       const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(axId)}&format=json&h=3`);
       checkedSources.push('DBLP (arXiv id)');
@@ -450,7 +503,9 @@ export function guessTitle(refRaw) {
   const ref = refRaw.replace(/^\s*\[[^\[\]]{0,70}\]\s*/, '');
   let m = ref.match(/[“"]([^”"]{15,250})[”"]/);
   if (m) return m[1].replace(/[.,]$/, '');
-  const parts = ref.split(/(?<!\b[A-Z])(?<!\bal)\.(?:\s+|$)/).map((s) => s.trim()).filter((s) => s.length > 0);
+  // periods after initials, "et al" and journal abbreviations do not end a segment
+  const parts = ref.split(/(?<!\b[A-Z])(?<!\bal)(?<!\b(?:Phys|Rev|Lett|Nucl|Proc|Ann|Math|Sci|Acta|Eur|Mod|Int|Adv|Commun|Instrum|Meth|Jr|Sr))\.(?:\s+|$)/)
+    .map((s) => s.trim()).filter((s) => s.length > 0);
   const plausible = (p) => {
     const words = p.split(/\s+/).length;
     return words >= 3 && words <= 40 && !isVenue(p);
@@ -464,5 +519,18 @@ export function guessTitle(refRaw) {
   // glue the author block to the title; recover the tail after the last "et al"
   const tail = parts[0]?.match(/\bet\s+al\b\.?,?\s+(.{12,220})$/i);
   if (tail && plausible(tail[1].trim())) return tail[1].trim();
+  // physics/JHEP style: "P. W. Higgs, Broken symmetries and the masses of
+  // gauge bosons, Phys. Rev. Lett. 13 (1964) 508." — comma-separated with the
+  // title as the longest plausible middle segment
+  const commaSegs = ref.split(/,\s+/).map((s) => s.trim());
+  if (commaSegs.length >= 3) {
+    let best = null;
+    for (const seg of commaSegs.slice(1)) {
+      const words = seg.split(/\s+/).length;
+      if (words >= 4 && words <= 30 && !isVenue(seg) && !/\d{3,}/.test(seg) &&
+          /^[A-Z]/.test(seg) && (!best || words > best.split(/\s+/).length)) best = seg;
+    }
+    if (best) return best;
+  }
   return null;
 }

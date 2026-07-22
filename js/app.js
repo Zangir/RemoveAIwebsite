@@ -4,7 +4,7 @@
 import { scanText } from './core/detect.js';
 import { parseBib } from './core/bibparser.js';
 import { extractCitations, parseTheBibliography, crossCheck, bibResources } from './core/texparser.js';
-import { makeClient, verifyEntry, verifyFreeform } from './core/verify.js';
+import { makeClient, verifyEntry, verifyFreeform, batchResolveIds } from './core/verify.js';
 import { fixText, fixBib, fixTexCitations } from './core/fixer.js';
 import { buildReport, reportToMarkdown, STATUS_LABEL } from './core/report.js';
 import { makeZip } from './core/zip.js';
@@ -253,11 +253,16 @@ async function verifyAll() {
   state.citationResults = [];
   $('cite-section').hidden = false;
 
+  // one batch POST resolves every arXiv id / DOI in the whole document up front
+  setProgress(3, 'Batch-resolving arXiv ids and DOIs…');
+  let prefetch;
+  try { prefetch = await batchResolveIds(targets, client); } catch { prefetch = new Map(); }
+
   const verifyOne = async (t) => {
     try {
       return t.kind === 'bib'
-        ? await verifyEntry({ ...t.entry, title: t.entry.title, type: t.entry.type }, client)
-        : await verifyFreeform(t.item.text, client);
+        ? await verifyEntry({ ...t.entry, title: t.entry.title, type: t.entry.type }, client, prefetch)
+        : await verifyFreeform(t.item.text, client, prefetch);
     } catch (e) {
       return { status: 'error', corrections: [], checkedSources: [], note: e.message };
     }

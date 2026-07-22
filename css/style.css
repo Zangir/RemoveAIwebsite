@@ -30,10 +30,38 @@ body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
-header { max-width: 1080px; margin: 0 auto; padding: 32px 20px 8px; }
-h1 { margin: 0; font-size: 1.9rem; }
-.tagline { margin: 2px 0 10px; color: var(--muted); font-size: 1.05rem; }
-.sub { margin: 0; color: var(--muted); font-size: .92rem; max-width: 74ch; }
+
+/* ---------- hero ---------- */
+.hero {
+  background:
+    radial-gradient(1100px 420px at 15% -10%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 60%),
+    radial-gradient(900px 380px at 95% 0%, color-mix(in srgb, #17b26a 18%, transparent), transparent 60%),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--bg)), var(--bg));
+  border-bottom: 1px solid var(--line);
+}
+.hero-inner { max-width: 1080px; margin: 0 auto; padding: 44px 20px 30px; }
+.brand { margin: 0 0 14px; font-weight: 800; font-size: 1.25rem; letter-spacing: .01em; }
+.brand-ai { color: var(--accent); }
+h1 { margin: 0; font-size: clamp(1.8rem, 4.5vw, 2.7rem); line-height: 1.15; letter-spacing: -.015em; }
+.tagline { margin: 14px 0 0; color: var(--muted); font-size: 1.08rem; max-width: 66ch; }
+.tagline b { color: var(--ink); }
+.hero-badges { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+.hb {
+  font-size: .82rem; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--line); background: var(--card);
+  border-radius: 999px; padding: 5px 12px;
+}
+.hero-example {
+  margin-top: 22px; background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 16px; max-width: 860px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 7%);
+}
+.hx-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 10px; }
+.hx-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; padding: 7px 0; border-top: 1px solid var(--line); font-size: .92rem; }
+.hx-row:first-of-type { border-top: none; }
+.hx-row code { font-family: var(--mono); font-size: .84rem; }
+.hx-note { color: var(--muted); font-size: .86rem; }
+.hero-disclaimer { margin: 16px 0 0; color: var(--muted); font-size: .85rem; max-width: 80ch; }
 main { max-width: 1080px; margin: 0 auto; padding: 12px 20px 40px; }
 footer { max-width: 1080px; margin: 0 auto; padding: 0 20px 40px; color: var(--muted); font-size: .85rem; }
 a { color: var(--accent); }
@@ -134,3 +162,29 @@ summary { cursor: pointer; color: var(--muted); }
 #changelog { font-size: .85rem; color: var(--muted); }
 #changelog li { margin: 4px 0; }
 .notice { padding: 10px 12px; border-radius: 8px; background: var(--medium-bg); color: var(--medium); font-size: .87rem; margin-top: 10px; }
+
+/* show more/less in Cited-as column */
+.more-toggle { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font-size: .82rem; font-weight: 600; }
+.more-toggle:hover { text-decoration: underline; }
+td .cited-full { overflow-wrap: anywhere; }
+
+/* search-elsewhere links on unmatched rows */
+.ext-search { margin-top: 4px; font-size: .78rem; color: var(--muted); }
+.ext-search a { margin-right: 8px; white-space: nowrap; }
+
+/* ---------- about / support ---------- */
+.about-line { color: var(--muted); max-width: 78ch; }
+.support-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 14px; }
+.support-box { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; background: var(--bg); }
+.support-title { margin: 0 0 6px; font-weight: 700; }
+.support-box p { margin: 0 0 10px; color: var(--muted); font-size: .9rem; }
+.star-btn {
+  display: inline-block; background: var(--accent); color: var(--accent-ink);
+  border-radius: 8px; padding: 9px 18px; text-decoration: none; font-weight: 700; font-size: .92rem;
+}
+.star-btn:hover { filter: brightness(1.08); }
+.bibtex {
+  font-family: var(--mono); font-size: .74rem; line-height: 1.45; background: var(--card);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  overflow-x: auto; margin: 0 0 10px; white-space: pre;
+}

@@ -248,7 +248,7 @@ async function doScan() {
 }
 
 async function verifyAll() {
-  const client = makeClient({ mailto: $('mailto').value.trim() });
+  const client = makeClient({});
   const targets = state.citationTargets;
   state.citationResults = [];
   $('cite-section').hidden = false;
@@ -346,17 +346,44 @@ function renderCitationRow(r) {
     `<div>${esc(c.field)}: <s>${esc(short(String(c.current ?? '(missing)'), 60))}</s> → <b>${esc(short(c.correct, 60))}</b>${c.soft ? ' <small>(optional)</small>' : ''}</div>`).join('');
   const canRemove = r.kind === 'bib' || r.kind === 'bibitem';
   const canFix = r.kind === 'bib' && (r.corrections || []).length > 0;
+
+  // Cited-as: truncated with a show-more toggle so long references stay readable
+  const full = String(r.title || '').replace(/\s+/g, ' ').trim();
+  const isLong = full.length > 110;
+  const citedAs = `<span class="cited-full" data-full="${esc(full)}" data-short="${esc(short(full, 110))}">${esc(short(full, 110))}</span>` +
+    (isLong ? ` <button type="button" class="more-toggle">show more</button>` : '') +
+    (r.matched?.url ? ` <a href="${esc(r.matched.url)}" target="_blank" rel="noopener">match ↗</a>` : '');
+
+  // one-click manual searches for sites that block automated queries
+  const needsManual = ['notfound', 'suspect', 'unverifiable', 'error'].includes(r.status);
+  const q = encodeURIComponent(short(full, 150));
+  const extSearch = needsManual ? `<div class="ext-search">Search manually:
+      <a href="https://scholar.google.com/scholar?q=${q}" target="_blank" rel="noopener">Google Scholar ↗</a>
+      <a href="https://dl.acm.org/action/doSearch?AllField=${q}" target="_blank" rel="noopener">ACM DL ↗</a>
+      <a href="https://www.researchgate.net/search?q=${q}" target="_blank" rel="noopener">ResearchGate ↗</a>
+      <a href="https://duckduckgo.com/?q=${q}" target="_blank" rel="noopener">DuckDuckGo ↗</a></div>` : '';
+
   tr.innerHTML = `
     <td><span class="badge ${esc(r.status)}">${esc((STATUS_LABEL[r.status] || r.status).replace(/^\S+\s/, ''))}</span></td>
     <td><span class="key">${esc(r.key)}</span><br><small>${esc(r.file)}</small></td>
-    <td>${esc(short(r.title, 100))}${r.matched?.url ? ` <a href="${esc(r.matched.url)}" target="_blank" rel="noopener">match ↗</a>` : ''}</td>
+    <td>${citedAs}</td>
     <td><small>${esc((r.checkedSources || []).join(', ') || '—')}</small></td>
-    <td>${corr}${r.note ? `<small>${esc(r.note)}</small>` : ''}</td>
-    <td>${canRemove || canFix ? `<select class="action">
-        <option value="keep">keep</option>
-        ${canFix ? '<option value="fix">fix fields</option>' : ''}
-        ${canRemove ? '<option value="remove">remove</option>' : ''}
-      </select>` : 'report only'}</td>`;
+    <td>${corr}${r.note ? `<small>${esc(r.note)}</small>` : ''}${extSearch}</td>
+    <td>${canRemove || canFix ? `<select class="action" title="What happens to this entry when you press Generate — override freely">
+        <option value="keep">keep unchanged</option>
+        ${canFix ? '<option value="fix">auto-correct fields</option>' : ''}
+        ${canRemove ? '<option value="remove">delete entry + its \\cite</option>' : ''}
+      </select>` : '<small>report only — PDFs can’t be edited; fix the source &amp; recompile</small>'}</td>`;
+
+  const toggle = tr.querySelector('.more-toggle');
+  if (toggle) {
+    const span = tr.querySelector('.cited-full');
+    toggle.addEventListener('click', () => {
+      const expanded = toggle.textContent === 'show less';
+      span.textContent = expanded ? span.dataset.short : span.dataset.full;
+      toggle.textContent = expanded ? 'show more' : 'show less';
+    });
+  }
   const sel = tr.querySelector('select');
   if (sel) {
     sel.value = r.action;
@@ -514,5 +541,24 @@ function setProgress(pct, label) {
   $('progress-fill').style.width = `${Math.min(100, pct)}%`;
   $('progress-label').textContent = label;
 }
+
+// ---- about section: live star count + copy-citation ----
+fetch('https://api.github.com/repos/Zangir/RemoveAIwebsite')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((j) => { if (j && typeof j.stargazers_count === 'number') $('star-btn').textContent = `★ Star on GitHub (${j.stargazers_count})`; })
+  .catch(() => { /* cosmetic only */ });
+
+$('copy-cite').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('cite-bibtex').textContent);
+    $('copy-cite').textContent = '✅ Copied!';
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents($('cite-bibtex'));
+    const s = getSelection(); s.removeAllRanges(); s.addRange(range);
+    $('copy-cite').textContent = 'Press ⌘/Ctrl+C to copy';
+  }
+  setTimeout(() => { $('copy-cite').textContent = '📋 Copy BibTeX'; }, 2500);
+});
 function fmtSize(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b > 1024 ? (b / 1024).toFixed(1) + ' KB' : b + ' B'; }
 function short(s, max = 100) { s = String(s ?? '').replace(/\s+/g, ' ').trim(); return s.length > max ? s.slice(0, max - 1) + '…' : s; }

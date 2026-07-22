@@ -32,10 +32,10 @@ export function buildReport({ files, textFindings, citationResults, crossRef, ge
 
 export function reportToMarkdown(report) {
   const L = [];
-  L.push('# AI-text & citation check report');
+  L.push('# verifAI — AI-text & citation check report');
   L.push('');
   L.push(`Generated: ${report.generatedAt}  `);
-  L.push(`Tool: RemoveAI checker (regex + Semantic Scholar / CrossRef / OpenAlex — no generative AI used)`);
+  L.push(`Tool: verifAI (regex + Semantic Scholar / CrossRef / OpenAlex / DBLP — no generative AI used) — https://zangir.github.io/RemoveAIwebsite/`);
   L.push('');
   L.push('## Files');
   L.push('');

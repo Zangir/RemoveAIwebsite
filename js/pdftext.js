@@ -35,50 +35,101 @@ function needsSpace(a, b) {
 
 /**
  * Heuristic split of a PDF's references section into individual items.
- * Handles [1]-numbered, 1.-numbered and hanging-indent styles.
+ * Handles [1]-numbered, 1.-numbered, [Author et al., Year]-labeled (IJCAI
+ * style) and hanging-indent styles. Papers sometimes carry a second "Full
+ * Bibliography" in the appendix with the same entries — duplicates are
+ * merged. Table/figure debris that leaks in from appendices is filtered out.
  * Returns {items: [{index, text}], headingFound}.
  */
 export function splitReferences(fullText) {
-  const m = /\n\s*(references|bibliography|works cited)\s*\n/i.exec(fullText);
-  if (!m) return { items: [], headingFound: false };
-  let section = fullText.slice(m.index + m[0].length);
+  const headingRe = /\n\s*(?:[0-9IVX.\s]{0,6})?(references|(?:full )?bibliography|works cited)\s*\n/gi;
+  const sections = [];
+  let hm;
+  while ((hm = headingRe.exec(fullText))) sections.push(hm.index + hm[0].length);
+  if (!sections.length) return { items: [], headingFound: false };
 
-  // stop at a likely following section
-  const stop = /\n\s*(appendix|appendices|supplementary material|acknowledg(e)?ments?)\s*\n/i.exec(section);
-  if (stop) section = section.slice(0, stop.index);
+  const raw = [];
+  for (const start of sections) {
+    let section = fullText.slice(start);
+    const stop = /\n\s*(appendix|appendices|supplementary material|acknowledg(?:e)?ments?|[0-9IVX.\s]{0,6}(?:full )?bibliography)\s*\n/i.exec(section);
+    if (stop) section = section.slice(0, stop.index);
+    raw.push(...splitOneSection(section));
+  }
 
-  const lines = section.split('\n');
+  // dedupe (main References vs appendix Full Bibliography list the same works)
+  const seen = new Set();
   const items = [];
+  for (const text of raw) {
+    if (!looksLikeReference(text)) continue;
+    const key = text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 70);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(text);
+  }
+
+  return {
+    items: items.map((text, i) => ({ index: i + 1, text })),
+    headingFound: true,
+  };
+}
+
+function splitOneSection(section) {
+  const lines = section.split('\n');
+  const out = [];
   let cur = '';
   const numbered = /^\s*(?:\[\d{1,3}\]|\d{1,3}\.)\s+/;
+  // "[Achiam et al., 2023]" / "[Hoffmann and Nebel, 2001]" / "[Silver, 2024a]"
+  const labelRe = /\[[A-Z][^\[\]]{0,60}?(?:19|20)\d{2}[a-z]?\]/g;
 
-  const isNumberedDoc = lines.filter((l) => numbered.test(l)).length >= 2;
-  if (isNumberedDoc) {
+  const labelCount = (section.match(labelRe) || []).length;
+  const numberedCount = lines.filter((l) => numbered.test(l)).length;
+
+  if (numberedCount >= 2 && numberedCount >= labelCount / 2) {
     for (const line of lines) {
       if (numbered.test(line)) {
-        if (cur.trim()) items.push(cur.trim());
+        if (cur.trim()) out.push(clean(cur));
         cur = line.replace(numbered, '');
       } else if (cur) {
         cur += ' ' + line.trim();
       }
     }
-    if (cur.trim()) items.push(cur.trim());
+    if (cur.trim()) out.push(clean(cur));
+  } else if (labelCount >= 3) {
+    // label-anchored: split at every [Label, Year] marker regardless of line
+    // position (PDF extraction reflows lines arbitrarily)
+    const flat = section.replace(/\s+/g, ' ');
+    const idxs = [];
+    let m;
+    const re = new RegExp(labelRe.source, 'g');
+    while ((m = re.exec(flat))) idxs.push(m.index);
+    for (let i = 0; i < idxs.length; i++) {
+      const end = i + 1 < idxs.length ? idxs[i + 1] : flat.length;
+      out.push(clean(flat.slice(idxs[i], end)));
+    }
   } else {
-    // hanging indent / blank-line separated: start of item ≈ line beginning with a capitalized surname pattern
+    // hanging indent / blank-line separated
     const starter = /^[A-Z][\p{L}'’-]+,?\s+(?:[A-Z]\.|[A-Z][\p{L}'’-]+)/u;
     for (const line of lines) {
       const t = line.trim();
-      if (!t) { if (cur.trim()) { items.push(cur.trim()); cur = ''; } continue; }
-      if (starter.test(t) && cur.length > 60) { items.push(cur.trim()); cur = t; }
+      if (!t) { if (cur.trim()) { out.push(clean(cur)); cur = ''; } continue; }
+      if (starter.test(t) && cur.length > 60) { out.push(clean(cur)); cur = t; }
       else cur += (cur ? ' ' : '') + t;
     }
-    if (cur.trim()) items.push(cur.trim());
+    if (cur.trim()) out.push(clean(cur));
   }
+  return out.filter(Boolean);
+}
 
-  return {
-    items: items
-      .map((text, i) => ({ index: i + 1, text: text.replace(/\s+/g, ' ') }))
-      .filter((it) => it.text.length >= 20 && it.text.length <= 1200),
-    headingFound: true,
-  };
+const clean = (s) => s.replace(/\s+/g, ' ').trim();
+
+/** Filter out table rows, figure captions and other appendix debris. */
+export function looksLikeReference(text) {
+  if (text.length < 30 || text.length > 1200) return false;
+  if (!/(?:19|20)\d{2}/.test(text)) return false;               // a reference has a year
+  const tokens = text.split(/\s+/);
+  const junk = tokens.filter((t) => /^[\d.,:;%×+–-]+$/.test(t) || /^[✓✗†‡|]+$/.test(t)).length;
+  if (junk / tokens.length > 0.25) return false;                // numeric/table debris
+  if (/\b(?:Figure|Table|Algorithm)\s+\d+\s*:/.test(text.slice(0, 60))) return false; // caption
+  if (!/[A-Z][a-z]{2,}/.test(text)) return false;               // needs a proper word
+  return true;
 }

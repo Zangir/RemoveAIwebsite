@@ -3,39 +3,66 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RemoveAI — catch AI-generated text &amp; fake citations before arXiv does</title>
-<meta name="description" content="Free checker for arXiv submissions: finds ChatGPT artifacts ('As an AI language model…', 'I hope this helps!') and hallucinated references in .tex/.bib/.pdf, then fixes them. 100% client-side, no GenAI, files never leave your browser.">
-<meta name="keywords" content="arXiv, AI-generated text detector, fake citations, hallucinated references, ChatGPT artifacts, LaTeX checker, BibTeX validator, paper checker">
+<title>verifAI — catch hallucinated citations & ChatGPT leftovers before reviewers do</title>
+<meta name="description" content="Free checker for research papers: finds AI-generated text artifacts ('As an AI language model…') and hallucinated references in .tex/.bib/.pdf, verifies every citation against 4 scholarly databases, and fixes what it finds. 100% in your browser, no GenAI.">
+<meta name="keywords" content="verifAI, arXiv, AI-generated text detector, fake citations, hallucinated references, ChatGPT artifacts, LaTeX checker, BibTeX validator, citation checker">
 <link rel="canonical" href="https://zangir.github.io/RemoveAIwebsite/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="RemoveAI — catch AI-generated text & fake citations before arXiv does">
-<meta property="og:description" content="Drop in your .tex/.bib/.pdf → get a problem report and fixed files. Verifies every citation against Semantic Scholar, CrossRef & OpenAlex. No GenAI, no uploads — runs in your browser.">
+<meta property="og:title" content="verifAI — catch hallucinated citations & ChatGPT leftovers before reviewers do">
+<meta property="og:description" content="Drop in your .tex/.bib/.pdf → every citation is verified against Semantic Scholar, CrossRef, OpenAlex & DBLP, chat artifacts are flagged, and you download fixed files. Free, private, no GenAI.">
 <meta property="og:url" content="https://zangir.github.io/RemoveAIwebsite/">
 <meta property="og:image" content="https://zangir.github.io/RemoveAIwebsite/assets/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="RemoveAI — catch AI-generated text & fake citations before arXiv does">
-<meta name="twitter:description" content="arXiv now rejects papers with chat artifacts and hallucinated references. Check yours first — free, client-side, no GenAI.">
+<meta name="twitter:title" content="verifAI — is your paper safe to submit?">
+<meta name="twitter:description" content="arXiv now rejects papers with chat artifacts and hallucinated references. Check yours first — free, in-browser, no GenAI.">
 <meta name="twitter:image" content="https://zangir.github.io/RemoveAIwebsite/assets/og.png">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebApplication","name":"RemoveAI",
+{"@context":"https://schema.org","@type":"WebApplication","name":"verifAI",
 "url":"https://zangir.github.io/RemoveAIwebsite/",
-"description":"Checker for arXiv submissions: detects AI-generated text artifacts and verifies citations against Semantic Scholar, CrossRef and OpenAlex, then produces fixed files.",
-"applicationCategory":"Utilities","operatingSystem":"Any (browser)","offers":{"@type":"Offer","price":"0"}}
+"description":"Checker for research papers: detects AI-generated text artifacts and verifies citations against Semantic Scholar, CrossRef, OpenAlex and DBLP, then produces fixed files.",
+"applicationCategory":"Utilities","operatingSystem":"Any (browser)","offers":{"@type":"Offer","price":"0"},
+"author":[{"@type":"Person","name":"Zangir Iklassov"},{"@type":"Person","name":"Kyriakos Tsourekas"}]}
 </script>
 <link rel="stylesheet" href="css/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🧹</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>✅</text></svg>">
 </head>
 <body>
-<header>
-  <h1>🧹 RemoveAI</h1>
-  <p class="tagline">AI-text &amp; citation checker for arXiv submissions</p>
-  <p class="sub">
-    Finds chat-assistant artifacts and hallucinated references in <b>.tex / .bib / .bbl / .pdf / .txt</b> files
-    using key phrases, regular expressions and cross-checks against
-    <b>Semantic Scholar, CrossRef and OpenAlex</b> (which also index arXiv).
-    No generative AI is used anywhere. Your files never leave the browser —
-    only citation titles/DOIs are sent to the public APIs for verification.
-  </p>
+<header class="hero">
+  <div class="hero-inner">
+    <p class="brand">✅ verif<span class="brand-ai">AI</span></p>
+    <h1>Is your paper safe to submit?</h1>
+    <p class="tagline">
+      arXiv and major venues now <b>reject papers</b> with AI-written leftovers and made-up references.
+      verifAI finds ChatGPT artifacts and <b>hallucinated citations</b> in your
+      <b>.tex / .bib / .pdf</b> — and hands you fixed files.
+    </p>
+    <div class="hero-badges">
+      <span class="hb">🔒 100% in your browser</span>
+      <span class="hb">🚫 zero generative AI</span>
+      <span class="hb">🗄 4 scholarly databases</span>
+      <span class="hb">🆓 free &amp; open source</span>
+    </div>
+
+    <div class="hero-example" aria-label="Example of a caught problem">
+      <div class="hx-title">What it catches — real examples:</div>
+      <div class="hx-row"><span class="badge notfound">not found</span>
+        <code>\cite{smith2023quantum}</code>
+        <span class="hx-note">“Recursive Quantum Embedding Fusion…” — unknown to Semantic Scholar, CrossRef, OpenAlex &amp; DBLP, DOI doesn’t resolve → <b>hallucinated, removed</b></span>
+      </div>
+      <div class="hx-row"><span class="badge high">high</span>
+        <code>“Certainly! Here is the revised introduction.”</code>
+        <span class="hx-note">chat artifact left in the paper → <b>sentence removed</b></span>
+      </div>
+      <div class="hx-row"><span class="badge fixable">fixable</span>
+        <code>year = {<s>2021</s> → 2019}</code>
+        <span class="hx-note">wrong year → <b>corrected from the matched record</b></span>
+      </div>
+    </div>
+    <p class="hero-disclaimer">
+      ⚖️ verifAI gives you <b>leads, not verdicts</b> — every fix is a suggestion you review and can override.
+      Your files never leave the browser; only citation titles are sent to public scholarly APIs.
+    </p>
+  </div>
 </header>
 
 <main>
@@ -48,10 +75,6 @@
     <p class="demo-row">No files handy? <button id="demo-btn" class="linklike" type="button">▶ Try the demo</button> — loads a sample paper with 4 chat artifacts and a fabricated citation planted in it.</p>
     <ul id="file-list" class="file-list"></ul>
     <div class="controls">
-      <label class="mailto-label" title="CrossRef & OpenAlex give faster, more reliable service to requests that identify themselves ('polite pool'). Optional; sent only to those APIs.">
-        Contact e-mail for API polite pool (optional):
-        <input type="email" id="mailto" placeholder="you@university.edu" autocomplete="email">
-      </label>
       <button id="scan-btn" class="primary" disabled>Scan files</button>
       <button id="reset-btn" class="ghost" hidden>Start over</button>
     </div>
@@ -77,7 +100,7 @@
         <tbody></tbody>
       </table>
     </div>
-    <p class="fineprint">High-severity chat artifacts are pre-selected for removal. Low-severity stylistic flags are never auto-removed — real authors use those phrases too. Matches inside quotation marks or verbatim blocks are treated as deliberate examples.</p>
+    <p class="fineprint">High-severity chat artifacts are pre-selected for removal. Low-severity stylistic flags are never auto-removed — real authors use those phrases too. Matches inside quotation marks, tables or verbatim blocks are treated as deliberate examples.</p>
   </section>
 
   <section id="cite-section" class="card" hidden>
@@ -86,15 +109,20 @@
     <div class="table-wrap">
       <table id="cite-table">
         <thead>
-          <tr><th>Status</th><th>Key</th><th>Cited as</th><th>Checked against</th><th>Problem / proposed correction</th><th>Action</th></tr>
+          <tr><th>Status</th><th>Key</th><th>Cited as</th><th>Checked against</th><th>Problem / proposed correction</th>
+          <th title="What will happen to this entry when you press “Generate fixed files” — preset from the status, yours to override.">Action on generate ⓘ</th></tr>
         </thead>
         <tbody></tbody>
       </table>
     </div>
     <p class="fineprint">
-      “Not found” for a journal/conference entry across all three databases is the classic signature of a fabricated
-      citation — those default to <b>remove</b> (entry + its \cite commands). Books, websites, software and theses are
-      marked <b>unverifiable</b>, never auto-removed. You can override any action before generating fixed files.
+      <b>Action on generate</b> is what happens to each entry when you press “Generate fixed files”:
+      <b>keep unchanged</b> (nothing happens) · <b>auto-correct fields</b> (year/DOI/authors fixed from the matched record) ·
+      <b>delete entry + its \cite</b> (removed from the .bib and every \cite command). It is preset from the status and you can override it.
+      “Not found” across all four databases (Semantic Scholar, CrossRef — which carries the full ACM catalog —, OpenAlex, DBLP — which carries the ACL Anthology)
+      is the classic signature of a fabricated citation. Books, websites, software and theses are marked <b>unverifiable</b>, never auto-removed.
+      For unmatched entries, use the <b>search ↗ links</b> in the row to check Google Scholar, ACM DL or ResearchGate manually
+      (those sites block automated queries, so verifAI can’t query them for you).
     </p>
   </section>
 
@@ -117,13 +145,47 @@
       — every report becomes a regression test.
     </p>
   </section>
+
+  <section id="about-section" class="card about">
+    <h2>Who made this?</h2>
+    <p class="about-line">
+      Built at <a href="https://mbzuai.ac.ae/" target="_blank" rel="noopener"><b>MBZUAI</b></a> by
+      <a href="https://www.linkedin.com/in/zangir-iklassov-81b516b5/" target="_blank" rel="noopener"><b>Prof. Zangir Iklassov</b></a>
+      and
+      <!-- TODO: replace with Kyriakos' exact LinkedIn profile URL -->
+      <a href="https://www.linkedin.com/search/results/all/?keywords=Kyriakos%20Tsourekas" target="_blank" rel="noopener"><b>Kyriakos Tsourekas</b></a>
+      — a professor and his student who got tired of seeing careers dented by a leftover “I hope this helps!”.
+    </p>
+    <div class="support-grid">
+      <div class="support-box">
+        <p class="support-title">⭐ 2 seconds to support us</p>
+        <p>If verifAI saved your submission, star the repo — it’s how other researchers find it before <i>their</i> deadline.</p>
+        <a class="star-btn" id="star-btn" href="https://github.com/Zangir/RemoveAIwebsite" target="_blank" rel="noopener">★ Star on GitHub</a>
+      </div>
+      <div class="support-box">
+        <p class="support-title">📚 Using verifAI in your research?</p>
+        <p>Cite us — paper coming soon; until then cite the tool:</p>
+        <pre id="cite-bibtex" class="bibtex">@misc{verifai2026,
+  title        = {verifAI: Catching AI-generated Text and
+                  Hallucinated Citations in Research Papers},
+  author       = {Iklassov, Zangir and Tsourekas, Kyriakos},
+  year         = {2026},
+  howpublished = {\url{https://zangir.github.io/RemoveAIwebsite/}},
+  note         = {Paper forthcoming}
+}</pre>
+        <button id="copy-cite" class="ghost" type="button">📋 Copy BibTeX</button>
+      </div>
+    </div>
+  </section>
 </main>
 
 <footer>
   <p>
-    Open source — <a id="repo-link" href="https://github.com/Zangir/RemoveAIwebsite" target="_blank" rel="noopener">GitHub</a>.
+    Open source (MIT) — <a id="repo-link" href="https://github.com/Zangir/RemoveAIwebsite" target="_blank" rel="noopener">GitHub</a>.
+    Verification: Semantic Scholar · CrossRef (incl. the ACM catalog) · OpenAlex · DBLP (incl. the ACL Anthology); arXiv is covered through
+    Semantic Scholar/OpenAlex/DBLP and direct arXiv-ID resolution — arXiv’s own API and sites like ResearchGate block browser requests.
     PDF findings are report-only (a PDF can’t be safely edited; fix the LaTeX source and recompile).
-    Every automated finding is a lead, not a verdict — review before resubmitting.
+    <b>Disclaimer:</b> every automated finding is a lead, not a verdict — review the report before resubmitting; you are responsible for your paper.
   </p>
 </footer>
 

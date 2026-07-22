@@ -1,4 +1,6 @@
-# 🧹 RemoveAI — catch AI-generated text & fake citations before arXiv does
+# ✅ verifAI — catch hallucinated citations & AI-text leftovers before reviewers do
+
+*(formerly RemoveAI)*
 
 [![tests](https://github.com/Zangir/RemoveAIwebsite/actions/workflows/test.yml/badge.svg)](https://github.com/Zangir/RemoveAIwebsite/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -13,9 +15,10 @@ text — chat artifacts like *"Certainly! Here is your revised introduction"* �
 **AI-fabricated citations**. Reviewers screenshot these on social media. Careers get hurt
 by a single leftover *"I hope this helps!"* in a PDF.
 
-**RemoveAI checks your paper before anyone else sees it, and fixes what it finds.**
+**verifAI checks your paper before anyone else sees it, and fixes what it finds.**
+Built at [MBZUAI](https://mbzuai.ac.ae/) by [Zangir Iklassov](https://www.linkedin.com/in/zangir-iklassov-81b516b5/) and Kyriakos Tsourekas.
 
-![RemoveAI report: flagged chat artifacts and a fabricated citation with proposed fixes](assets/screenshot.png)
+![verifAI report: flagged chat artifacts and a fabricated citation with proposed fixes](assets/screenshot.png)
 
 ## What it catches
 
@@ -24,7 +27,7 @@ by a single leftover *"I hope this helps!"* in a PDF.
 | 🗣 **Chat artifacts** | "As an AI language model…", "I hope this helps!", "You're absolutely right", "Here is your revised…", leftover "Copy code" | sentence removed |
 | 🕳 **Placeholders** | "[insert citation here]", "(Author, Year)", "[Your Name]", lorem ipsum | removed |
 | 📋 **Paste artifacts** | markdown `**bold**` / ` ``` ` inside LaTeX, invisible Unicode, curly quotes | converted / removed |
-| ❌ **Fabricated citations** | title unknown to **Semantic Scholar + CrossRef + OpenAlex**, DOI that doesn't resolve, real title with hallucinated authors | entry removed from `.bib` **and** its `\cite{…}` pruned from the `.tex` |
+| ❌ **Fabricated citations** | title unknown to **Semantic Scholar + CrossRef + OpenAlex + DBLP**, DOI that doesn't resolve, real title with hallucinated authors | entry removed from `.bib` **and** its `\cite{…}` pruned from the `.tex` |
 | 🔧 **Broken citations** | wrong year / DOI / venue / misspelled authors | corrected from the matched database record |
 | ✍️ **Style tells** | em-dash density, "delve into", "ever-evolving landscape" | flagged for review only — never auto-removed |
 
@@ -33,7 +36,7 @@ Also reported: keys cited but missing from the `.bib`, entries never cited, dupl
 ## How it works
 
 - **100% client-side.** Your files never leave the browser. Only citation titles/DOIs are sent
-  to the three public scholarly APIs. Nothing is stored anywhere.
+  to the four public scholarly APIs. Nothing is stored anywhere.
 - **Zero generative AI.** Detection is 45+ deterministic key-phrase/regex rules; verification is
   database lookups with fuzzy title matching + author/year cross-checks. Every finding is
   reproducible and explainable.
@@ -59,14 +62,13 @@ False positives destroy trust, so the checker is deliberately paranoid about *it
 
 Tested against real arXiv papers (clean papers come out clean — the *Attention Is All You Need*
 and BERT sources produce zero high-severity findings) plus a planted-problem corpus:
-**204 unit tests + Playwright end-to-end suites**, run in CI on every push.
+**216 unit tests + Playwright end-to-end suites**, run in CI on every push.
 
 ## Honest limitations
 
 Regex catches *artifacts* of AI generation, not AI-written prose in general — a carefully
 edited AI text will pass, and absence of findings is not proof of human authorship.
-Google Scholar has no API and arXiv's API blocks browser requests, so coverage comes from
-Semantic Scholar + CrossRef + OpenAlex (which index arXiv). Scanned PDFs have no extractable
+Google Scholar has no API; arXiv's API, ACM DL, and ResearchGate block browser requests — coverage comes from Semantic Scholar + CrossRef (carries the full ACM catalog) + OpenAlex + DBLP (carries the ACL Anthology), plus direct arXiv-ID resolution, with one-click manual-search links for the rest. Scanned PDFs have no extractable
 text. Every automated finding is a lead, not a verdict — you are responsible for your paper.
 
 ## Contributing

@@ -21,13 +21,16 @@
 // fetch is injectable for tests. All requests are throttled per host and
 // retried once on 429 (Retry-After respected, capped at 10 s).
 
-import { titleSimilarity, authorLastNames, authorOverlap, normalizeTitle } from './util.js';
+import { titleSimilarity, authorLastNames, authorOverlap, normalizeTitle, extractArxivId } from './util.js';
 import { isIndexableType } from './bibparser.js';
 
 const HOSTS = {
   s2: { base: 'https://api.semanticscholar.org', minGapMs: 1100 },
   crossref: { base: 'https://api.crossref.org', minGapMs: 400 },
   openalex: { base: 'https://api.openalex.org', minGapMs: 250 },
+  // DBLP fully indexes ACL Anthology, NeurIPS, ICLR, ICML, AAAI, IJCAI... —
+  // exactly the venues CrossRef lacks (no DOIs for many proceedings).
+  dblp: { base: 'https://dblp.org', minGapMs: 600 },
 };
 
 export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
@@ -96,6 +99,23 @@ function candFromCrossref(w) {
     venue: (w['container-title'] && w['container-title'][0]) || w.publisher || '',
     url: w.DOI ? `https://doi.org/${w.DOI}` : (w.URL || ''),
     crossrefScore: w.score,
+  };
+}
+
+function candFromDblp(hit) {
+  const info = hit?.info;
+  if (!info || !info.title) return null;
+  let authors = info.authors?.author || [];
+  if (!Array.isArray(authors)) authors = [authors];
+  return {
+    source: 'DBLP',
+    title: String(info.title).replace(/\.$/, ''),
+    authors: authors.map((a) => String(a.text ?? a).replace(/\s+\d{4}$/, '')).filter(Boolean),
+    year: info.year ? Number(info.year) : null,
+    doi: info.doi || null,
+    arxivId: null,
+    venue: info.venue || '',
+    url: info.ee || info.url || '',
   };
 }
 
@@ -191,6 +211,10 @@ export async function verifyEntry(entry, client) {
     const r = await tryStep('OpenAlex', () => client.call('openalex', `/works?search=${encodeURIComponent(normalizeTitle(entry.title))}&per-page=3`));
     for (const w of r?.results || []) { const c = candFromOpenAlex(w); if (c) candidates.push(c); }
   }
+  if (entry.title && need()) {
+    const r = await tryStep('DBLP', () => client.call('dblp', `/search/publ/api?q=${encodeURIComponent(normalizeTitle(entry.title))}&format=json&h=3`));
+    for (const h of r?.result?.hits?.hit || []) { const c = candFromDblp(h); if (c) candidates.push(c); }
+  }
 
   // ---- 3. classify ----
   // Same-title collisions are real (reprints, anniversary editions, similarly
@@ -275,41 +299,79 @@ export async function verifyEntry(entry, client) {
 
 /**
  * Verify a free-form reference string (from a PDF reference list or \bibitem).
- * Uses CrossRef's bibliographic matcher (designed for this), falls back to S2
- * title match on a guessed title.
+ * Pipeline: arXiv-id fast path (S2 resolves the id — the strongest evidence a
+ * PDF reference can carry) → CrossRef bibliographic matcher → S2 / DBLP /
+ * OpenAlex title search on a guessed title.
  */
 export async function verifyFreeform(refText, client) {
   const checkedSources = [];
-  const text = refText.replace(/\s+/g, ' ').trim().slice(0, 400);
+  const text = refText.replace(/\s+/g, ' ').trim().slice(0, 500);
   if (text.length < 15) return { status: 'unverifiable', matched: null, corrections: [], checkedSources, note: 'Reference string too short to match.' };
 
-  // arXiv id inside the reference is decent evidence by itself
   const guessedTitle = guessTitle(text);
-
+  const normText = normalizeTitle(text);
+  const scoreCand = (c) => {
+    const sim = titleSimilarity(guessedTitle || text, c.title);
+    const nt = normalizeTitle(c.title);
+    // Containment bonus: the candidate's full title appears verbatim in the
+    // reference. Guarded — if we have a title guess and the candidate is
+    // nothing like it, the containment is probably an adjacent-reference
+    // artifact, not a match.
+    const contained = nt.split(' ').length >= 4 && normText.includes(nt) && (!guessedTitle || sim >= 0.35);
+    return contained ? Math.max(sim, 0.95) : sim;
+  };
   let bestScore = 0, best = null;
-  try {
-    const r = await client.call('crossref', `/works?query.bibliographic=${encodeURIComponent(text)}&rows=2&select=title,author,issued,DOI,container-title,score,URL,publisher`);
-    checkedSources.push('CrossRef');
-    for (const w of r?.message?.items || []) {
-      const c = candFromCrossref(w);
-      if (!c) continue;
-      const sim = titleSimilarity(guessedTitle || text, c.title);
-      const contained = normalizeTitle(text).includes(normalizeTitle(c.title)) && normalizeTitle(c.title).split(' ').length >= 4;
-      const s = contained ? Math.max(sim, 0.95) : sim;
-      if (s > bestScore) { bestScore = s; best = c; }
-    }
-  } catch { /* fall through to S2 */ }
+  const consider = (c) => { if (!c) return; const s = scoreCand(c); if (s > bestScore) { bestScore = s; best = c; } };
 
+  // ---- 0. arXiv id in the reference: resolve it directly ----
+  const axId = extractArxivId(text);
+  if (axId) {
+    try {
+      const p = await client.call('s2', `/graph/v1/paper/arXiv:${encodeURIComponent(axId)}?fields=${S2_FIELDS}`);
+      checkedSources.push('Semantic Scholar (arXiv id)');
+      const c = candFromS2(p);
+      if (c) {
+        // corroborate: the resolved title or an author surname must appear in the ref text
+        const nt = normalizeTitle(c.title);
+        const titleHit = nt.split(' ').length >= 3 && normText.includes(nt);
+        const authorHit = candidateLastNames(c).some((n) => n.length > 3 && normText.includes(n));
+        if (titleHit || authorHit) {
+          return { status: 'verified', matched: c, corrections: [], checkedSources, note: `arXiv:${axId} resolves to “${c.title}” (${c.source}).` };
+        }
+        consider(c);
+      }
+    } catch { /* fall through */ }
+  }
+
+  // ---- 1. CrossRef bibliographic matcher on the whole string ----
+  try {
+    const r = await client.call('crossref', `/works?query.bibliographic=${encodeURIComponent(text.slice(0, 400))}&rows=2&select=title,author,issued,DOI,container-title,score,URL,publisher`);
+    checkedSources.push('CrossRef');
+    for (const w of r?.message?.items || []) consider(candFromCrossref(w));
+  } catch { /* continue */ }
+
+  // ---- 2. title search: S2 → DBLP → OpenAlex ----
+  const q = guessedTitle || text.replace(/^\[[^\]]*\]\s*/, '').split(/\s+/).slice(0, 14).join(' ');
+  if (bestScore < 0.93 && q) {
+    try {
+      const r = await client.call('s2', `/graph/v1/paper/search/match?query=${encodeURIComponent(q)}&fields=${S2_FIELDS}`);
+      checkedSources.push('Semantic Scholar');
+      consider(candFromS2(r?.data?.[0]));
+    } catch { /* continue */ }
+  }
+  if (bestScore < 0.93 && q) {
+    try {
+      const r = await client.call('dblp', `/search/publ/api?q=${encodeURIComponent(normalizeTitle(q))}&format=json&h=3`);
+      checkedSources.push('DBLP');
+      for (const h of r?.result?.hits?.hit || []) consider(candFromDblp(h));
+    } catch { /* continue */ }
+  }
   if (bestScore < 0.93 && guessedTitle) {
     try {
-      const r = await client.call('s2', `/graph/v1/paper/search/match?query=${encodeURIComponent(guessedTitle)}&fields=${S2_FIELDS}`);
-      checkedSources.push('Semantic Scholar');
-      const c = candFromS2(r?.data?.[0]);
-      if (c) {
-        const s = titleSimilarity(guessedTitle, c.title);
-        if (s > bestScore) { bestScore = s; best = c; }
-      }
-    } catch { /* ignore */ }
+      const r = await client.call('openalex', `/works?search=${encodeURIComponent(normalizeTitle(guessedTitle))}&per-page=3`);
+      checkedSources.push('OpenAlex');
+      for (const w of r?.results || []) consider(candFromOpenAlex(w));
+    } catch { /* continue */ }
   }
 
   if (!checkedSources.length) return { status: 'error', matched: null, corrections: [], checkedSources, note: 'All lookups failed.' };
@@ -320,16 +382,33 @@ export async function verifyFreeform(refText, client) {
   return { status: 'notfound', matched: null, corrections: [], checkedSources, note: `No confident match in ${checkedSources.join(', ')}. Free-form references (books, URLs, reports) can be legitimate and still unmatched — treat as a lead, not a verdict.` };
 }
 
-/** Guess the title inside a free-form reference: quoted span, or the segment between the first and second period-boundary. */
-export function guessTitle(ref) {
+// A segment that names WHERE something was published, not WHAT. "In Defense
+// of..." is a real title, so "In" alone is not enough — require a venue marker.
+// (The acronym case — "In NeurIPS" — is checked case-SENSITIVELY: under /i,
+// [A-Z]{2,} would also match "In defense".)
+const VENUE_RE = /^(?:in(?::|\s+(?:proc|proceedings|the|advances|findings|international|annual|\d))|proc\b|proceedings\b|pages?\b|vol(?:ume)?\b|arxiv|journal\b|transactions\b|technical report\b|mit press\b|springer\b)/i;
+const VENUE_ACRONYM_RE = /^In\s+[A-Z]{2,}\b/;
+const isVenue = (p) => VENUE_RE.test(p) || VENUE_ACRONYM_RE.test(p);
+
+/** Guess the title inside a free-form reference: quoted span, or the segment between period-boundaries. */
+export function guessTitle(refRaw) {
+  // strip an IJCAI-style "[Author et al., 2023]" label prefix
+  const ref = refRaw.replace(/^\s*\[[^\[\]]{0,70}\]\s*/, '');
   let m = ref.match(/[“"]([^”"]{15,250})[”"]/);
   if (m) return m[1].replace(/[.,]$/, '');
   const parts = ref.split(/(?<!\b[A-Z])(?<!\bal)\.(?:\s+|$)/).map((s) => s.trim()).filter((s) => s.length > 0);
+  const plausible = (p) => {
+    const words = p.split(/\s+/).length;
+    return words >= 3 && words <= 40 && !isVenue(p);
+  };
   // parts[0] is usually authors (+year); title is usually the following segment
   for (let i = 1; i < Math.min(parts.length, 3); i++) {
     const p = parts[i].replace(/^\(?\d{4}\)?\.?\s*/, '');
-    const words = p.split(/\s+/).length;
-    if (words >= 3 && words <= 40 && !/^(?:in proc|proc\b|in:|pages?\b|vol\b|arxiv)/i.test(p)) return p;
+    if (plausible(p)) return p;
   }
+  // "…, and Anil Kumar et al. GPT-4 technical report" — the "et al." guard can
+  // glue the author block to the title; recover the tail after the last "et al"
+  const tail = parts[0]?.match(/\bet\s+al\b\.?,?\s+(.{12,220})$/i);
+  if (tail && plausible(tail[1].trim())) return tail[1].trim();
   return null;
 }

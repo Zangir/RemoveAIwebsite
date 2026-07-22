@@ -143,7 +143,7 @@ test('arXiv id resolves through Semantic Scholar', async () => {
   assert.equal(r.status, 'verified');
 });
 
-test('429 rate limit is retried once, then falls through to other sources', async () => {
+test('429 rate limit is retried with backoff, then falls through to other sources', async () => {
   let s2Calls = 0;
   const f = mockFetch([
     ['semanticscholar', () => { s2Calls++; return { status: 429, headers: { 'Retry-After': '0' } }; }],
@@ -162,7 +162,7 @@ test('429 rate limit is retried once, then falls through to other sources', asyn
     type: 'inproceedings', key: 'bert', title: 'BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding',
     author: 'Devlin, Jacob', year: '2019', doi: null, arxivId: null,
   }, fastClient(f));
-  assert.equal(s2Calls, 2);
+  assert.equal(s2Calls, 3); // 3 attempts with adaptive backoff
   assert.equal(r.status, 'verified');
   assert.equal(r.matched.source, 'CrossRef');
 });

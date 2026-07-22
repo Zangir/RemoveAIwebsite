@@ -36,7 +36,12 @@ const HOSTS = {
 export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
   const f = fetchImpl || ((...a) => globalThis.fetch(...a));
   const zzz = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
-  const lastCall = { s2: 0, crossref: 0, openalex: 0 };
+  const lastCall = {};
+  // Adaptive throttling: long documents mean hundreds of sequential calls, and
+  // shared-pool hosts (Semantic Scholar especially) start 429ing under
+  // sustained load. Every 429 stretches that host's gap for the rest of the
+  // session; successes slowly relax it back.
+  const gapScale = {};
   const now = () => (globalThis.performance ? performance.now() : new Date().getTime());
 
   async function call(host, path) {
@@ -45,24 +50,28 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
     if (mailto && (host === 'crossref' || host === 'openalex')) {
       url += (url.includes('?') ? '&' : '?') + 'mailto=' + encodeURIComponent(mailto);
     }
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const wait = lastCall[host] + cfg.minGapMs - now();
+    const ATTEMPTS = 3;
+    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+      const gap = cfg.minGapMs * (gapScale[host] || 1);
+      const wait = (lastCall[host] || 0) + gap - now();
       if (wait > 0) await zzz(wait);
       lastCall[host] = now();
       let res;
       try {
         res = await f(url, { headers: { Accept: 'application/json' } });
       } catch (e) {
-        if (attempt === 0) { await zzz(1500); continue; }
+        if (attempt < ATTEMPTS - 1) { await zzz(1500 * (attempt + 1)); continue; }
         throw new Error(`network:${host}`);
       }
       if (res.status === 429 || res.status === 503) {
-        const ra = Math.min((parseInt(res.headers?.get?.('Retry-After')) || 3) * 1000, 10000);
-        if (attempt === 0) { await zzz(ra); continue; }
+        gapScale[host] = Math.min(4, (gapScale[host] || 1) * 1.5);
+        const ra = Math.min((parseInt(res.headers?.get?.('Retry-After')) || 2 + attempt * 2) * 1000, 12000);
+        if (attempt < ATTEMPTS - 1) { await zzz(ra); continue; }
         throw new Error(`ratelimit:${host}`);
       }
       if (res.status === 404) return null;
       if (!res.ok) throw new Error(`http${res.status}:${host}`);
+      gapScale[host] = Math.max(1, (gapScale[host] || 1) * 0.97);
       return res.json();
     }
     return null;

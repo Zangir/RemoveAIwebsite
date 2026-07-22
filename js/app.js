@@ -204,7 +204,7 @@ async function doScan() {
     f.bibitems = items;
     for (const it of items) {
       bibKeys.push(it.key);
-      state.citationTargets.push({ kind: 'bibitem', key: it.key, title: it.text.slice(0, 160), item: it, file: f.name });
+      state.citationTargets.push({ kind: 'bibitem', key: it.key, title: it.text.slice(0, 420), item: it, file: f.name });
     }
   }
   for (const f of state.files.filter((x) => x.kind === 'pdf' && x.text)) {
@@ -213,7 +213,7 @@ async function doScan() {
     if (!headingFound && f.text.length > 2000) warnings.push(`${f.name}: no "References" heading found — PDF citation check skipped.`);
     if (items.length > 150) { warnings.push(`${f.name}: ${items.length} references detected; checking the first 150.`); items.length = 150; }
     for (const it of items) {
-      state.citationTargets.push({ kind: 'pdfref', key: `[${it.index}]`, title: it.text.slice(0, 200), item: it, file: f.name });
+      state.citationTargets.push({ kind: 'pdfref', key: `[${it.index}]`, title: it.text.slice(0, 420), item: it, file: f.name });
     }
   }
 

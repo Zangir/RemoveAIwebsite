@@ -2,13 +2,13 @@
 
 *(formerly RemoveAI)*
 
-[![tests](https://github.com/Zangir/RemoveAIwebsite/actions/workflows/test.yml/badge.svg)](https://github.com/Zangir/RemoveAIwebsite/actions/workflows/test.yml)
+[![tests](https://github.com/Zangir/verifAI/actions/workflows/test.yml/badge.svg)](https://github.com/Zangir/verifAI/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Website](https://img.shields.io/website?url=https%3A%2F%2Fzangir.github.io%2FRemoveAIwebsite%2F&label=live%20site)](https://zangir.github.io/RemoveAIwebsite/)
+[![Website](https://img.shields.io/website?url=https%3A%2F%2Fzangir.github.io%2FverifAI%2F&label=live%20site)](https://zangir.github.io/verifAI/)
 [![No GenAI](https://img.shields.io/badge/GenAI%20used-0%25-success)](#how-it-works)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-### ▶️ **[Open the checker — free, no signup](https://zangir.github.io/RemoveAIwebsite/)** · then hit *"Try the demo"*
+### ▶️ **[Open the checker — free, no signup](https://zangir.github.io/verifAI/)** · then hit *"Try the demo"*
 
 arXiv (and a growing list of venues) now **rejects papers** containing obvious AI-generated
 text — chat artifacts like *"Certainly! Here is your revised introduction"* — or
@@ -74,7 +74,7 @@ text. Every automated finding is a lead, not a verdict — you are responsible f
 ## Contributing
 
 Found a false positive or something that slipped through?
-[Open an issue](https://github.com/Zangir/RemoveAIwebsite/issues/new/choose) with the snippet —
+[Open an issue](https://github.com/Zangir/verifAI/issues/new/choose) with the snippet —
 each report becomes a regression test. New detection rules are one-line PRs in
 [`js/core/detect.js`](js/core/detect.js).
 

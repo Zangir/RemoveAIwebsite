@@ -9,6 +9,7 @@ const STATUS_LABEL = {
   unverifiable: '❔ unverifiable',
   error: '⚡ check failed',
   skipped: '⏭ skipped',
+  checking: '⏳ checking',
 };
 
 export function buildReport({ files, textFindings, citationResults, crossRef, generatedAt }) {
@@ -35,7 +36,7 @@ export function reportToMarkdown(report) {
   L.push('# verifAI — AI-text & citation check report');
   L.push('');
   L.push(`Generated: ${report.generatedAt}  `);
-  L.push(`Tool: verifAI (regex + Semantic Scholar / CrossRef / OpenAlex / DBLP — no generative AI used) — https://zangir.github.io/RemoveAIwebsite/`);
+  L.push(`Tool: verifAI (regex + Semantic Scholar / CrossRef / OpenAlex / DBLP — no generative AI used) — https://zangir.github.io/verifAI/`);
   L.push('');
   L.push('## Files');
   L.push('');

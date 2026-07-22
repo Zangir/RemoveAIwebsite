@@ -222,3 +222,11 @@ test('DBLP queries are capped to 8 significant words', async () => {
   const q = decodeURIComponent(dblpUrl.match(/q=([^&]*)/)[1]);
   assert.ok(q.split(' ').length <= 8, `query too long: ${q}`);
 });
+
+test('math alpha-label style ([Gro87], [CLRS09]) splits correctly', () => {
+  const text = `\nReferences\n[BGS75] T. Baker, J. Gill, and R. Solovay. Relativizations of the P =? NP question. SIAM Journal on Computing, 4(4):431-442, 1975.\n[CLRS09] Thomas H. Cormen, Charles E. Leiserson, Ronald L. Rivest, and Clifford Stein. Introduction to Algorithms. MIT Press, third edition, 2009.\n[Gro87] M. Gromov. Hyperbolic groups. In Essays in group theory, pages 75-263. Springer, 1987.\n`;
+  const { items } = splitReferences(text);
+  assert.equal(items.length, 3, JSON.stringify(items.map((i) => i.text.slice(0, 40))));
+  assert.ok(items[0].text.startsWith('[BGS75]'));
+  assert.ok(items[2].text.includes('Hyperbolic groups'));
+});

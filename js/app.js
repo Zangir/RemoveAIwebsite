@@ -263,23 +263,38 @@ async function verifyAll() {
     }
   };
 
-  for (let i = 0; i < targets.length; i++) {
-    if (state.cancelled) {
-      for (const t of targets.slice(i)) {
-        const res = { ...t, status: 'skipped', corrections: [], checkedSources: [], note: 'Verification stopped by user.', action: 'keep' };
-        state.citationResults.push(res);
-        renderCitationRow(res);
+  // All rows render immediately as "checking…" and fill in as results land.
+  // References verify CONCURRENTLY (worker pool); calls to any single API host
+  // stay serialized inside the client, so rate limits are still honored —
+  // parallelism comes from different references using different hosts at once.
+  state.citationResults = targets.map((t) => ({
+    ...t, status: 'checking', corrections: [], checkedSources: [], note: '', action: 'keep',
+  }));
+  for (const res of state.citationResults) renderCitationRow(res);
+  updateCiteSummary();
+
+  let done = 0;
+  const applyResult = (res, r) => {
+    Object.assign(res, r, { action: defaultAction(res, r) });
+    if (res._tr) fillCitationRow(res._tr, res);
+  };
+  let next = 0;
+  const CONCURRENCY = 4;
+  const worker = async () => {
+    while (next < state.citationResults.length) {
+      const res = state.citationResults[next++];
+      if (state.cancelled) {
+        applyResult(res, { status: 'skipped', corrections: [], checkedSources: [], note: 'Verification stopped by user.' });
+        continue;
       }
-      break;
+      const r = await verifyOne(res);
+      applyResult(res, state.cancelled && r.status === 'error' ? { ...r, status: 'skipped', note: 'Verification stopped by user.' } : r);
+      done++;
+      setProgress(5 + (done / targets.length) * 90, `Verifying ${done} / ${targets.length} (${targets.length - done} in flight or queued)`);
+      updateCiteSummary();
     }
-    const t = targets[i];
-    setProgress(5 + (i / targets.length) * 90, `Verifying ${i + 1} / ${targets.length}: ${t.key} — ${t.title.slice(0, 60)}`);
-    const r = await verifyOne(t);
-    const res = { ...t, ...r, action: defaultAction(t, r) };
-    state.citationResults.push(res);
-    renderCitationRow(res);
-    updateCiteSummary();
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
 
   // Second pass: entries that came up empty may have been checked while a
   // rate-limited source was benched — recheck them once the pool recovers.
@@ -291,8 +306,7 @@ async function verifyAll() {
       setProgress(95 + (i / redo.length) * 5, `Second pass ${i + 1} / ${redo.length} (rechecking unmatched): ${res.key}`);
       const r2 = await verifyOne(res);
       if (r2.status !== res.status || (r2.checkedSources?.length || 0) > (res.checkedSources?.length || 0)) {
-        Object.assign(res, r2, { action: defaultAction(res, r2) });
-        if (res._tr) fillCitationRow(res._tr, res);
+        applyResult(res, r2);
       }
     }
   }
@@ -367,6 +381,14 @@ function renderCitationRow(r) {
 }
 
 function fillCitationRow(tr, r) {
+  if (r.status === 'checking') {
+    tr.innerHTML = `
+      <td><span class="badge checking">checking…</span></td>
+      <td><span class="key">${esc(r.key)}</span><br><small>${esc(r.file)}</small></td>
+      <td>${esc(short(String(r.title || ''), 110))}</td>
+      <td><small>—</small></td><td><small>queued</small></td><td><small>—</small></td>`;
+    return;
+  }
   const corr = (r.corrections || []).map((c) =>
     `<div>${esc(c.field)}: <s>${esc(short(String(c.current ?? '(missing)'), 60))}</s> → <b>${esc(short(c.correct, 60))}</b>${c.soft ? ' <small>(optional)</small>' : ''}</div>`).join('');
   const canRemove = r.kind === 'bib' || r.kind === 'bibitem';
@@ -422,7 +444,7 @@ function fillCitationRow(tr, r) {
 }
 
 function updateCiteSummary() {
-  const rs = state.citationResults;
+  const rs = state.citationResults.filter((r) => r.status !== 'checking');
   const counts = {};
   for (const r of rs) counts[r.status] = (counts[r.status] || 0) + 1;
   const parts = Object.entries(counts).map(([s, n]) => `${n} ${(STATUS_LABEL[s] || s)}`);
@@ -540,7 +562,7 @@ function applyFixes() {
   const shareText = nProblems > 0
     ? `Checked my paper for AI-generated text artifacts and hallucinated citations before submitting — caught ${nProblems} problem(s). Free, runs in the browser, no GenAI:`
     : 'Checked my paper for AI-generated text artifacts and hallucinated citations before submitting — all clean. Free, runs in the browser, no GenAI:';
-  $('share-x').href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://zangir.github.io/RemoveAIwebsite/')}`;
+  $('share-x').href = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent('https://zangir.github.io/verifAI/')}`;
   $('share-row').hidden = false;
 }
 
@@ -567,7 +589,7 @@ function setProgress(pct, label) {
 }
 
 // ---- about section: live star count + copy-citation ----
-fetch('https://api.github.com/repos/Zangir/RemoveAIwebsite')
+fetch('https://api.github.com/repos/Zangir/verifAI')
   .then((r) => (r.ok ? r.json() : null))
   .then((j) => { if (j && typeof j.stargazers_count === 'number') $('star-btn').textContent = `★ Star on GitHub (${j.stargazers_count})`; })
   .catch(() => { /* cosmetic only */ });

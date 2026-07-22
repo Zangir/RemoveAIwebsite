@@ -144,7 +144,9 @@ td code, .key { font-family: var(--mono); font-size: .82rem; }
 .badge.fixable { color: var(--medium); background: var(--medium-bg); }
 .badge.suspect { color: var(--medium); background: var(--medium-bg); }
 .badge.notfound { color: var(--high); background: var(--high-bg); }
-.badge.unverifiable, .badge.skipped { color: var(--low); background: var(--low-bg); }
+.badge.unverifiable, .badge.skipped, .badge.checking { color: var(--low); background: var(--low-bg); }
+.badge.checking { animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .45; } }
 .badge.error { color: var(--high); background: var(--high-bg); }
 
 select.action {

@@ -48,7 +48,17 @@ export function makeClient({ fetchImpl, mailto = '', sleep } = {}) {
   const benchedUntil = {};
   const now = () => (globalThis.performance ? performance.now() : new Date().getTime());
 
-  async function call(host, path) {
+  // Per-host serialization: concurrent references may verify in parallel, but
+  // calls to the SAME host are chained so its rate-limit gap stays honest.
+  const hostChain = {};
+  function call(host, path) {
+    const run = () => doCall(host, path);
+    const p = (hostChain[host] || Promise.resolve()).then(run, run);
+    hostChain[host] = p.catch(() => {});
+    return p;
+  }
+
+  async function doCall(host, path) {
     const cfg = HOSTS[host];
     if ((benchedUntil[host] || 0) > now()) throw new Error(`cooldown:${host}`);
     let url = cfg.base + path;

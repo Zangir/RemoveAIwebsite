@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
   - name: Try the live checker
-    url: https://zangir.github.io/RemoveAIwebsite/
+    url: https://zangir.github.io/verifAI/
     about: Drop in your .tex/.bib/.pdf and get a report + fixed files
